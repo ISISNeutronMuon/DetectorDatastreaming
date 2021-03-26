@@ -46,3 +46,26 @@ this will print the following:
 ```
 
 and if left running will subsequently print every time data is sent by this or any other process.
+
+This can be extended using matplotlib to do graphing such as:
+
+```python
+import kafka_helper
+import matplotlib.pyplot as plt
+
+histogrammed_data = {"left": 0, "right": 0}
+
+def received_new_data(new_data):
+    histogrammed_data[new_data["position"]] += 1
+
+kafka_helper.do_func_on_live_data(received_new_data)
+
+figure, axes = plt.subplots()
+plt.ion()
+plt.show()
+
+while True:
+    plt.pause(1)
+    axes.bar(list(histogrammed_data.keys()), histogrammed_data.values())
+    plt.draw()
+```
