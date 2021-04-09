@@ -6,6 +6,9 @@ import matplotlib.pyplot as plt
 HEADER_STRING = "ffffffffffffffff0"
 END_HEADER = "efffffffffffffff0"
 
+HOST_PORT = 48641, 48642, 48643, 48644, 48868
+HOST_IP = "192.168.1.125"
+SRC_IP_ADDRESS = "192.168.1.201", "192.168.1.202", "192.168.1.203", "192.168.1.204", "192.168.1.251"
 
 def kafka_single_thread_udp_receiver(HOST_IP, SRC_IP_ADDRESS, HOST_PORT, stop, PACKET_COUNT,
                                      instance):  # ,stream_length):
@@ -23,6 +26,7 @@ def kafka_single_thread_udp_receiver(HOST_IP, SRC_IP_ADDRESS, HOST_PORT, stop, P
                 data, addr = sock.recvfrom(
                     900400)  # set buffer size (did have at 9004 for frame size, not sure if larger helps)
                 PACKET_COUNT = PACKET_COUNT + 1
+                # print(data.hex())
                 kafka_helper.send_data({'packet': data.hex(), 'packet_info': SRC_IP_ADDRESS})
         except socket.timeout:
             if stop():
@@ -35,6 +39,53 @@ def kafka_single_thread_udp_receiver(HOST_IP, SRC_IP_ADDRESS, HOST_PORT, stop, P
             # print("thread killed",instance,"\n",end="\r",flush=True)
             break
     return PACKET_COUNT
+
+
+def thread_ch_list(ch_list):
+    thread_list = []
+    for i in ch_list:
+        if i <= 5:
+            thread_list.append(0)
+        elif 6 <= i <= 11:
+            thread_list.append(1)
+        elif 12 <= i <= 17:
+            thread_list.append(2)
+        elif 18 <= i <= 23:
+            thread_list.append(3)
+    thread_list = set(list(dict.fromkeys(thread_list)))
+    return thread_list
+
+
+def kafka_slim_single_thread_udp_receiver(stop, PACKET_COUNT,instance):  # ,stream_length):
+    sock = socket.socket(socket.AF_INET,  # Internet
+                         socket.SOCK_DGRAM)  # UDP
+    sock.bind((HOST_IP, HOST_PORT[instance],))
+    sock.settimeout(2)
+    print("Thread", instance, "started")
+    while True:
+        try:
+            if socket.gethostbyname(SRC_IP_ADDRESS[instance]):
+                data, addr = sock.recvfrom(900400)
+                # ^ set buffer size (did have at 9004 for frame size, not sure if larger helps)
+                PACKET_COUNT = PACKET_COUNT + 1
+                # print(data.hex())
+                kafka_helper.send_data({'packet': data.hex(), 'packet_info': SRC_IP_ADDRESS[instance]})
+        except socket.timeout:
+            if stop():
+                # print("thread killed_in")
+                break
+            continue
+            # break
+        if stop():
+            print("Total Packets Received:", instance, PACKET_COUNT, "\n", end="\r", flush=True)
+            # print("thread killed",instance,"\n",end="\r",flush=True)
+            break
+    return PACKET_COUNT
+
+
+
+
+
 
 
 def data_plot_string(kafka_data):
@@ -74,16 +125,3 @@ def data_plot_string(kafka_data):
     axes[0, 3].set_title('Time')
     plt.show()
     return
-
-
-def kafka_live_data_proc(*args):
-    procdata = data_proc_func.kafka_data_decoder_ip_dict(args)
-    # for i in procdata:
-    procdata = data_proc_func.data_split_live_dict(procdata)
-    data_proc_func.dict_create(procdata, procdata.get("packet_info"))  # [i]), i)
-    return procdata
-
-
-def live_data_test(*args):
-    # print(args)
-    return args

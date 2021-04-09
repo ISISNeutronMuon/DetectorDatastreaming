@@ -1,4 +1,6 @@
 import collections
+import queue
+
 import kafka_helper
 import plot_func
 
@@ -231,15 +233,16 @@ def data_split_live_dict(kafka_data):
                        'StartSig': collections.Counter(),
                        'Misplace': collections.Counter(), 'MaxSlope': collections.Counter(),
                        'AreaData': collections.Counter(), 'packet_info': ""}
-    for line in kafka_data.get("packet"):
-        kafka_data_length = (len(line))
-        for i in range(1, kafka_data_length, 32):  # return 32 character chunks
-            position.append(int(line[i + 29:i + 32], 16))
-            PulseHeight.append(int(line[i + 26:i + 29], 16))
-            StartSig.append(int(line[i + 23:i + 26], 16))
-            Misplace.append(int(line[i + 20:i + 23], 16))
-            MaxSlope.append(int(line[i + 17:i + 20], 16))
-            AreaData.append(int(line[i + 14:i + 17], 16))
+    # for line in kafka_data.get("packet"):
+    line = kafka_data.get("packet")
+    kafka_data_length = (len(line))
+    for i in range(1, kafka_data_length, 32):  # return 32 character chunks
+        position.append(int(line[i + 29:i + 32], 16))
+        PulseHeight.append(int(line[i + 26:i + 29], 16))
+        StartSig.append(int(line[i + 23:i + 26], 16))
+        Misplace.append(int(line[i + 20:i + 23], 16))
+        MaxSlope.append(int(line[i + 17:i + 20], 16))
+        AreaData.append(int(line[i + 14:i + 17], 16))
     kafka_data_dict['position'] = collections.Counter(position)
     kafka_data_dict['PulseHeight'] = collections.Counter(PulseHeight)
     kafka_data_dict['StartSig'] = collections.Counter(StartSig)
