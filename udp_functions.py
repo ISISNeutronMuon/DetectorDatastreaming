@@ -68,6 +68,7 @@ def kafka_slim_single_thread_udp_receiver(stop, PACKET_COUNT,instance):  # ,stre
                 data, addr = sock.recvfrom(900400)
                 # ^ set buffer size (did have at 9004 for frame size, not sure if larger helps)
                 PACKET_COUNT = PACKET_COUNT + 1
+                print("FPGA" + str(instance) + " Packet Count:" + str(PACKET_COUNT))
                 # print(data.hex())
                 kafka_helper.send_data({'packet': data.hex(), 'packet_info': SRC_IP_ADDRESS[instance]})
         except socket.timeout:

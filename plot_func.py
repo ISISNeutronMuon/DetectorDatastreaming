@@ -14,6 +14,11 @@ def plt_position(graph_list, i):
         axes = i
     return axes
 
+def legend_without_duplicate_labels(ax):
+    handles, labels = ax.get_legend_handles_labels()
+    unique = [(h, l) for i, (h, l) in enumerate(zip(handles, labels)) if l not in labels[:i]]
+    ax.legend(*zip(*unique))
+
 
 # ######### plot with choice of 32 channels, graph types on same plots ###########
 def dict_sel_ch_grph_same(dict_data, ch_list, graph_list):
@@ -274,6 +279,135 @@ def dict_create(dict_data, title):
     axes[1, 2].set_title('Area Data')
     return
 
+def loop_plot(plots):
+    figs={}
+    axs={}
+    for idx,plot in enumerate(plots):
+        figs[idx]=plt.figure()
+        axs[idx]=figs[idx].add_subplot(111)
+        axs[idx].plot(plot[0],plot[1])
+    return figs, axs
+
+
+def embedded_plotting(ch_list, graph_list, histogrammed_data_list,figure, axes):
+    axes_count = 0
+    for i in ch_list:
+        if len(histogrammed_data_list[i]['position']):
+            if graph_list[0] == 1:
+                axes[plt_position(graph_list, axes_count)].bar(
+                    list(histogrammed_data_list[i]['position'].keys()),
+                    histogrammed_data_list[i]['position'].values(),
+                    label="CH" + str(i), width=1)
+                axes[plt_position(graph_list, axes_count)].set_title('Position')
+                axes_count = axes_count + 1
+            if graph_list[1] == 1:
+                axes[plt_position(graph_list, axes_count)].bar(
+                    list(histogrammed_data_list[i]['PulseHeight'].keys()),
+                    histogrammed_data_list[i]['PulseHeight'].values())
+                axes[plt_position(graph_list, axes_count)].set_title('Pulse Height')
+                axes_count = axes_count + 1
+                # print(statistics.mean(histogrammed_data_list[i]['PulseHeight']))# .values()))
+            if graph_list[2] == 1:
+                axes[plt_position(graph_list, axes_count)].bar(
+                    list(histogrammed_data_list[i]['StartSig'].keys()),
+                    histogrammed_data_list[i]['StartSig'].values())
+                axes[plt_position(graph_list, axes_count)].set_title('Start Sig')
+                axes_count = axes_count + 1
+            if graph_list[3] == 1:
+                axes[plt_position(graph_list, axes_count)].bar(
+                    list(histogrammed_data_list[i]['Misplace'].keys()),
+                    histogrammed_data_list[i]['Misplace'].values())
+                axes[plt_position(graph_list, axes_count)].set_title('Misplace')
+                axes_count = axes_count + 1
+            if graph_list[4] == 1:
+                axes[plt_position(graph_list, axes_count)].bar(
+                    list(histogrammed_data_list[i]['MaxSlope'].keys()),
+                    histogrammed_data_list[i]['MaxSlope'].values())
+                axes[plt_position(graph_list, axes_count)].set_title('Max Slope')
+                axes_count = axes_count + 1
+            if graph_list[5] == 1:
+                axes[plt_position(graph_list, axes_count)].bar(
+                    list(histogrammed_data_list[i]['AreaData'].keys()),
+                    histogrammed_data_list[i]['AreaData'].values())
+                axes[plt_position(graph_list, axes_count)].set_title('Area Data')
+            axes_count = 0
+    return figure, axes
+
+def callable_dict_sel_ch_grph_same(ch_list, graph_list, dict_data,figure, axes):
+    axes_count = 0
+    if sum(graph_list) == 1:
+        for i in ch_list:
+            if len(dict_data[i]['position']):
+                if graph_list[0] == 1:
+                    axes.bar(list(dict_data[i]['position'].keys()), dict_data[i]['position'].values(),
+                             label="CH" + str(i))
+                    axes.set_title('Position')
+                elif graph_list[1] == 1:
+                    axes.bar(list(dict_data[i]['PulseHeight'].keys()), dict_data[i]['PulseHeight'].values(),
+                             label="CH" + str(i))
+                    axes.set_title('Pulse Height')
+                elif graph_list[2] == 1:
+                    axes.bar(list(dict_data[i]['StartSig'].keys()), dict_data[i]['StartSig'].values(),
+                             label="CH" + str(i))
+                    axes.set_title('Start Sig')
+                elif graph_list[3] == 1:
+                    axes.bar(list(dict_data[i]['Misplace'].keys()), dict_data[i]['Misplace'].values(),
+                             label="CH" + str(i))
+                    axes.set_title('Misplace')
+                elif graph_list[4] == 1:
+                    axes.bar(list(dict_data[i]['MaxSlope'].keys()), dict_data[i]['MaxSlope'].values(),
+                             label="CH" + str(i))
+                    axes.set_title('Max Slope')
+                elif graph_list[5] == 1:
+                    axes.bar(list(dict_data[i]['AreaData'].keys()), dict_data[i]['AreaData'].values(),
+                             label="CH" + str(i))
+                    axes.set_title('Area Data')
+        axes.legend()
+    else:
+        for i in ch_list:
+            if len(dict_data[i]['position']):
+                if graph_list[0] == 1:
+                    axes[plt_position(graph_list, axes_count)].bar(list(dict_data[i]['position'].keys()),
+                                                                   dict_data[i]['position'].values())#,label="CH" + str(i))
+
+                    # print(len(axes[plt_position(graph_list, axes_count)].get_legend_handles_labels()))
+                    # length = len(axes[plt_position(graph_list, axes_count)].get_legend_handles_labels())
+                    # ()!="" else "")
+                                                                   # label = "Representatives" if i == 0 else ""
+                                # not in labels[:i]
+                    # axes[plt_position(graph_list, axes_count)].bar(label="CH" + str(i))
+                    axes[plt_position(graph_list, axes_count)].set_title('Position')
+                    axes_count = axes_count + 1
+                if graph_list[1] == 1:
+                    axes[plt_position(graph_list, axes_count)].bar(list(dict_data[i]['PulseHeight'].keys()),
+                                                                   dict_data[i]['PulseHeight'].values())
+                    axes[plt_position(graph_list, axes_count)].set_title('Pulse Height')
+                    axes_count = axes_count + 1
+                if graph_list[2] == 1:
+                    axes[plt_position(graph_list, axes_count)].bar(list(dict_data[i]['StartSig'].keys()),
+                                                                   dict_data[i]['StartSig'].values())
+                    axes[plt_position(graph_list, axes_count)].set_title('Start Sig')
+                    axes_count = axes_count + 1
+                if graph_list[3] == 1:
+                    axes[plt_position(graph_list, axes_count)].bar(list(dict_data[i]['Misplace'].keys()),
+                                                                   dict_data[i]['Misplace'].values())
+                    axes[plt_position(graph_list, axes_count)].set_title('Misplace')
+                    axes_count = axes_count + 1
+                if graph_list[4] == 1:
+                    axes[plt_position(graph_list, axes_count)].bar(list(dict_data[i]['MaxSlope'].keys()),
+                                                                   dict_data[i]['MaxSlope'].values())
+                    axes[plt_position(graph_list, axes_count)].set_title('Max Slope')
+                    axes_count = axes_count + 1
+                if graph_list[5] == 1:
+                    axes[plt_position(graph_list, axes_count)].bar(list(dict_data[i]['AreaData'].keys()),
+                                                                   dict_data[i]['AreaData'].values())
+                    axes[plt_position(graph_list, axes_count)].set_title('Area Data')
+                axes_count = 0
+        # axes[plt_position(graph_list, axes_count)].legend()
+    return figure, axes
+
+
+
 # ###############################################       OLD     ################################################
 # ######### plot channels in list on same graph and allows you to choose which graphs to display-6 channels############
 # def plt_dict_sel_ch_graph(dict_data, title, ch_list, graph_list):
@@ -383,3 +517,5 @@ def dict_create(dict_data, title):
 #     axes[1, 1].set_title('Max Slope')
 #     axes[1, 2].set_title('Area Data')
 #     return
+
+# ######### plot with choice of 32 channels, graph types on same plots ###########

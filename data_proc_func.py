@@ -1,6 +1,8 @@
 import collections
 import queue
 
+import numpy as np
+
 import kafka_helper
 import plot_func
 
@@ -167,7 +169,7 @@ def data_split_dict_channel(kafka_data):
     return kafka_dict_list
 
 
-def data_split_dict_channel_ip_combine(kafka_data):
+def data_split_dict_channel_ip_combine(kafka_data, ch_list):
     position = [[] for i in range(24)]
     PulseHeight = [[] for i in range(24)]
     StartSig = [[] for i in range(24)]
@@ -186,14 +188,16 @@ def data_split_dict_channel_ip_combine(kafka_data):
         for list_line in line:
             kafka_data_length = (len(list_line))
             for i in range(0, kafka_data_length, 32):  # return 32 character chunks
-                channel = int(((bin(int('1' + (list_line[i + 11:i + 13]), 16))[3:])[3:6]), 2) + channel_offset
-                position[channel].append(int(list_line[i + 29:i + 32], 16))
-                PulseHeight[channel].append(int(list_line[i + 26:i + 29], 16))
-                StartSig[channel].append(int(list_line[i + 23:i + 26], 16))
-                Misplace[channel].append(int(list_line[i + 20:i + 23], 16))
-                MaxSlope[channel].append(int(list_line[i + 17:i + 20], 16))
-                AreaData[channel].append(int(list_line[i + 14:i + 17], 16))
-    for i in range(0, 24, 1):
+                if list_line[i:i + 32] != '00000000000000000000000000000000':  # to remove empty packets
+                    channel = int(((bin(int('1' + (list_line[i + 11:i + 13]), 16))[3:])[3:6]), 2) + channel_offset
+                    if channel in ch_list:
+                        position[channel].append(int(int(list_line[i + 29:i + 32], 16) / 16))
+                        PulseHeight[channel].append(int(int(list_line[i + 26:i + 29], 16) / 16))
+                        StartSig[channel].append(int(int(list_line[i + 23:i + 26], 16) / 16))
+                        Misplace[channel].append(int(int(list_line[i + 20:i + 23], 16) / 16))
+                        MaxSlope[channel].append(int(int(list_line[i + 17:i + 20], 16) / 16))
+                        AreaData[channel].append(int(int(list_line[i + 14:i + 17], 16) / 16))
+    for i in ch_list:  # range(0, 24, 1):
         kafka_dict_list[i]['position'] = collections.Counter(position[i])
         kafka_dict_list[i]['PulseHeight'] = collections.Counter(PulseHeight[i])
         kafka_dict_list[i]['StartSig'] = collections.Counter(StartSig[i])
@@ -201,6 +205,76 @@ def data_split_dict_channel_ip_combine(kafka_data):
         kafka_dict_list[i]['MaxSlope'] = collections.Counter(MaxSlope[i])
         kafka_dict_list[i]['AreaData'] = collections.Counter(AreaData[i])
     return kafka_dict_list
+
+
+def data_split_dict_channel_ip_combine_time(kafka_data, ch_list):
+    time_bins = 1024
+    position = [[[] for i in range(time_bins)] for t in range(24)]
+    PulseHeight = [[[] for i in range(time_bins)] for t in range(24)]
+    StartSig = [[[] for i in range(time_bins)] for t in range(24)]
+    Misplace = [[[] for i in range(time_bins)] for t in range(24)]
+    MaxSlope = [[[] for i in range(time_bins)] for t in range(24)]
+    AreaData = [[[] for i in range(time_bins)] for t in range(24)]
+    kafka_time_dict_list = [[{'position': collections.Counter(), 'PulseHeight': collections.Counter(),
+                              'StartSig': collections.Counter(),
+                              'Misplace': collections.Counter(), 'MaxSlope': collections.Counter(),
+                              'AreaData': collections.Counter()} for i in range(time_bins)] for t in range(24)]
+    l = 0
+    for line in kafka_data.values():
+        channel_offset = (int(
+            list(kafka_data.keys())[l][11:]) - 1) * 6  # create and offset for channel based on ipaddress
+        l = l + 1
+        for list_line in line:
+            kafka_data_length = (len(list_line))
+            for i in range(0, kafka_data_length, 32):  # return 32 character chunks
+                channel = int(((bin(int('1' + (list_line[i + 11:i + 13]), 16))[3:])[3:6]), 2) + channel_offset
+                if channel in ch_list:
+                    time_split = list_line[i + 2:i + 8]
+                    time = (int(time_split[:3], 16))  # only using the top three bits for development
+                    # time = (int(list_line[i + 2:i + 8], 16))
+                    position[channel][time].append(int(list_line[i + 29:i + 32], 16))
+                    PulseHeight[channel][time].append(int(list_line[i + 26:i + 29], 16))
+                    StartSig[channel][time].append(int(list_line[i + 23:i + 26], 16))
+                    Misplace[channel][time].append(int(list_line[i + 20:i + 23], 16))
+                    MaxSlope[channel][time].append(int(list_line[i + 17:i + 20], 16))
+                    AreaData[channel][time].append(int(list_line[i + 14:i + 17], 16))
+    for i in ch_list:  # range(0, 24, 1):
+        for t in range(time_bins):
+            kafka_time_dict_list[i][t]['position'] = collections.Counter(position[i][t])
+            kafka_time_dict_list[i][t]['PulseHeight'] = collections.Counter(PulseHeight[i][t])
+            kafka_time_dict_list[i][t]['StartSig'] = collections.Counter(StartSig[i][t])
+            kafka_time_dict_list[i][t]['Misplace'] = collections.Counter(Misplace[i][t])
+            kafka_time_dict_list[i][t]['MaxSlope'] = collections.Counter(MaxSlope[i][t])
+            kafka_time_dict_list[i][t]['AreaData'] = collections.Counter(AreaData[i][t])
+    return kafka_time_dict_list
+
+
+def data_split_dict_channel_ip_combine_PosTime(kafka_data, ch_list):
+    time_bins = 1024
+    time_factor = 16777215 / time_bins
+    position = np.zeros((24, 256, time_bins))
+    l = 0
+    for line in kafka_data.values():
+        channel_offset = (int(
+            list(kafka_data.keys())[l][11:]) - 1) * 6  # create and offset for channel based on ipaddress
+        l = l + 1
+        for list_line in line:
+            kafka_data_length = (len(list_line))
+            for i in range(0, kafka_data_length, 32):  # return 32 character chunks
+                if list_line[i:i + 32] != '00000000000000000000000000000000':
+                    channel = int(((bin(int('1' + (list_line[i + 11:i + 13]), 16))[3:])[3:6]), 2) + channel_offset
+                    if channel in ch_list:
+                        time_split = int(list_line[i + 2:i + 8], 16)
+                        time = int(time_split / 1000)  # set to 5000 for TS2
+                        # if time_split != 0:
+                        #     time = int(time_factor / time_split)
+                        # else:
+                        #     time = 0
+                        pos = int(list_line[i + 29:i + 32], 16)
+                        scaled_pos = int(pos / 16)
+                        # pos = int(int(list_line[i + 29:i + 32], 16)/16)
+                        position[channel, scaled_pos, time] += 1
+    return position
 
 
 ###################combines two dictionaries with matching keys#####################
