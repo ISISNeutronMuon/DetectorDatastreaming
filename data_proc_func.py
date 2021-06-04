@@ -250,9 +250,9 @@ def data_split_dict_channel_ip_combine_time(kafka_data, ch_list):
 
 
 def data_split_dict_channel_ip_combine_PosTime(kafka_data, ch_list):
-    time_bins = 1024
+    time_bins = int(1024)
     time_factor = 16777215 / time_bins
-    position = np.zeros((24, 256, time_bins))
+    position = np.zeros((24, 256, time_bins), dtype=int)
     l = 0
     for line in kafka_data.values():
         channel_offset = (int(
@@ -275,6 +275,38 @@ def data_split_dict_channel_ip_combine_PosTime(kafka_data, ch_list):
                         # pos = int(int(list_line[i + 29:i + 32], 16)/16)
                         position[channel, scaled_pos, time] += 1
     return position
+
+def data_split_dict_channel_ip_combine_Pos_PulseTime(kafka_data, ch_list):
+    time_bins = int(1024)
+    time_factor = 16777215 / time_bins
+    position = np.zeros((24, 256, time_bins), dtype=int)
+    pulseheight = np.zeros((24, 256, time_bins), dtype=int)
+    l = 0
+    for line in kafka_data.values():
+        channel_offset = (int(
+            list(kafka_data.keys())[l][11:]) - 1) * 6  # create and offset for channel based on ipaddress
+        l = l + 1
+        for list_line in line:
+            kafka_data_length = (len(list_line))
+            for i in range(0, kafka_data_length, 32):  # return 32 character chunks
+                if list_line[i:i + 32] != '00000000000000000000000000000000':
+                    channel = int(((bin(int('1' + (list_line[i + 11:i + 13]), 16))[3:])[3:6]), 2) + channel_offset
+                    if channel in ch_list:
+                        time_split = int(list_line[i + 2:i + 8], 16)
+                        time = int(time_split / 1000)  # set to 5000 for TS2
+                        # if time_split != 0:
+                        #     time = int(time_factor / time_split)
+                        # else:
+                        #     time = 0
+                        pos = int(list_line[i + 29:i + 32], 16)
+                        plh = (int(list_line[i + 26:i + 29], 16))
+                        scaled_pos = int(pos / 16)
+                        scaled_plh = int(plh / 16)
+                        # pos = int(int(list_line[i + 29:i + 32], 16)/16)
+                        position[channel, scaled_pos, time] += 1
+                        pulseheight[channel, scaled_plh, time] += 1
+    return position, pulseheight
+
 
 
 ###################combines two dictionaries with matching keys#####################
