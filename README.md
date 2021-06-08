@@ -19,7 +19,7 @@ from kafka_helper import get_data_between
 from datetime import datetime, timedelta
 from dateutil.tz import tzutc
 
-my_data = get_data_between(datetime.now(tzutc()) - timedelta(hours=1), datetime.now(tzutc()))
+my_data = get_data_between(datetime.now() - timedelta(hours=1), datetime.now())
 print(my_data) 
 ```
 
