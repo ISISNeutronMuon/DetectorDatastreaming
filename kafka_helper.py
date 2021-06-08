@@ -18,6 +18,7 @@ from collections.abc import Callable
 import threading
 import json
 from datetime import datetime
+from dateutil.tz import tzutc
 import uuid
 
 
@@ -84,6 +85,9 @@ def get_data_between(start_time: datetime, end_time: datetime):
     consumer = _create_consumer()
 
     epoch = datetime.utcfromtimestamp(0)
+
+    start_time = start_time.astimezone(tzutc())
+    end_time = end_time.astimezone(tzutc())
 
     def get_part_offset(dt):
         time_since_epoch = int((dt - epoch).total_seconds() * 1000)
