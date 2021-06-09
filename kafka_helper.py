@@ -23,7 +23,7 @@ import uuid
 
 
 SERVER = "hinata.isis.cclrc.ac.uk:9092"
-TOPIC = "MAPS_detector_diagnostics"
+TOPIC = "{}_detector_diagnostics"
 serialiser = lambda v: json.dumps(v).encode('utf-8')
 deserialiser = lambda v: json.loads(v)
 
@@ -40,24 +40,26 @@ def _create_consumer():
 producer = Producer({"bootstrap.servers": SERVER})
 
 
-def send_data(data: dict):
+def send_data(data: dict, instrument="MAPS"):
     """
     Send data to kafka
     Args:
         data: A dictionary representing the data.
+        instrument: The instrument to send data for
     """
-    producer.produce(TOPIC, serialiser(data))
+    producer.produce(TOPIC.format(instrument), serialiser(data))
     producer.flush()
 
 
-def do_func_on_live_data(my_func: Callable):
+def do_func_on_live_data(my_func: Callable, instrument="MAPS"):
     """
     Passes any live data to my_func.
     Args:
         my_func: The function to call with the live data.
+        instrument: The instrument to get data from
     """
     consumer = _create_consumer()
-    consumer.subscribe([TOPIC])
+    consumer.subscribe([TOPIC.format(instrument)])
 
     def live_data_thread():
         while True:
@@ -74,13 +76,14 @@ def do_func_on_live_data(my_func: Callable):
     thread.start()
 
 
-def get_data_between(start_time: datetime, end_time: datetime):
+def get_data_between(start_time: datetime, end_time: datetime, instrument="MAPS"):
     """
     Get the data between the two given times.
     Note that this is based on the timestamp of when the data was put into kafka.
     Args:
         start_time: The beginning of where you want the data from
         end_time: The end of where you want the data to
+        instrument: The instrument to get the data from
     """
     consumer = _create_consumer()
 
@@ -91,7 +94,7 @@ def get_data_between(start_time: datetime, end_time: datetime):
 
     def get_part_offset(dt):
         time_since_epoch = int((dt - epoch).total_seconds() * 1000)
-        return consumer.offsets_for_times([TopicPartition(TOPIC, 0, time_since_epoch)])[0]
+        return consumer.offsets_for_times([TopicPartition(TOPIC.format(instrument), 0, time_since_epoch)])[0]
 
     try:
         start_time_part_offset = get_part_offset(start_time)
