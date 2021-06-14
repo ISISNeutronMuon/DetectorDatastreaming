@@ -87,7 +87,7 @@ def get_data_between(start_time: datetime, end_time: datetime, instrument="MAPS"
     """
     consumer = _create_consumer()
 
-    epoch = datetime.utcfromtimestamp(0)
+    epoch = datetime.fromtimestamp(0, tzutc())
 
     start_time = start_time.astimezone(tzutc())
     end_time = end_time.astimezone(tzutc())
