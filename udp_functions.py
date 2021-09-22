@@ -83,12 +83,6 @@ def kafka_slim_single_thread_udp_receiver(stop, PACKET_COUNT,instance):  # ,stre
             break
     return PACKET_COUNT
 
-
-
-
-
-
-
 def data_plot_string(kafka_data):
     position, PulseHeight, StartSig, Misplace, MaxSlope, AreaData, Time = [], [], [], [], [], [], []
     position_combined, PulseHeight_combined, StartSig_combined, Misplace_combined, MaxSlope_combined, AreaData_combined, Time_combined = [], [], [], [], [], [], []
@@ -126,3 +120,31 @@ def data_plot_string(kafka_data):
     axes[0, 3].set_title('Time')
     plt.show()
     return
+
+
+def kafka_slim_single_thread_udp_receiver_MultiMerlin(stop, PACKET_COUNT,instance, Stream_Port, Stream_IP):  # ,stream_length):
+    sock = socket.socket(socket.AF_INET,  # Internet
+                         socket.SOCK_DGRAM)  # UDP
+    sock.bind((HOST_IP, Stream_Port,))
+    sock.settimeout(2)
+    print("Thread", instance, "started")
+    while True:
+        try:
+            if socket.gethostbyname(Stream_IP):
+                data, addr = sock.recvfrom(900400)
+                # ^ set buffer size (did have at 9004 for frame size, not sure if larger helps)
+                PACKET_COUNT = PACKET_COUNT + 1
+                print("FPGA" + str(Stream_IP) + " Packet Count:" + str(PACKET_COUNT))
+                # print(data.hex())
+                kafka_helper.send_data({'packet': data.hex(), 'packet_info': Stream_IP})
+        except socket.timeout:
+            if stop():
+                # print("thread killed_in")
+                break
+            continue
+            # break
+        if stop():
+            print("Total Packets Received:", instance, PACKET_COUNT, "\n", end="\r", flush=True)
+            # print("thread killed",instance,"\n",end="\r",flush=True)
+            break
+    return PACKET_COUNT
