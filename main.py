@@ -11,8 +11,8 @@ import queue
 import statistics
 plt.style.use('ggplot')
 
-ch_list = [14]
-# ch_list = list(range(0,24,1))
+#ch_list = [14]
+ch_list = list(range(0,24,1))
 graph_list = [1 ,1, 0, 0, 0, 0]
 # graph_list = [1 ,1, 1, 1, 1, 1]
 
@@ -30,11 +30,12 @@ kafka_dict_list = [{'position': collections.Counter(), 'PulseHeight': collection
                     'AreaData': collections.Counter()} for i in range(24)]
 
 # ######################code to select historic data to process###################################
-# start_time = datetime.datetime(year=2021, month=6, day=3, hour=13, minute=30)
-#start_time = datetime.datetime(year=2021, month=5, day=14, hour=0, minute=00)
-# end_time = datetime.datetime(year=2021, month=4, day=29, hour=12, minute=39)
-start_time = (datetime.datetime.now() - datetime.timedelta(minutes=70))
+#start_time = datetime.datetime(year=2021, month=6, day=3, hour=13, minute=30)
+#start_time = datetime.datetime(year=2021, month=9, day=23, hour=14, minute=0)
+#end_time = datetime.datetime(year=2021, month=9, day=23, hour=14, minute=30)
+start_time = (datetime.datetime.now() - datetime.timedelta(minutes=59))
 end_time = datetime.datetime.now()
+print(start_time)
 print(end_time)
 
 # ######################python code to select historic data to process###################################

@@ -50,6 +50,17 @@ def send_data(data: dict, instrument="MAPS"):
     producer.produce(TOPIC.format(instrument), serialiser(data))
     producer.flush()
 
+def send_flatBuffer(data,instrument):
+    """
+    Send data to kafka
+    Args:
+        data: Flatbuffer Data to send to Kafka
+        instrument: The instrument to send data for
+    """
+    producer.produce(TOPIC.format(instrument), data)
+    producer.flush()
+
+
 
 def do_func_on_live_data(my_func: Callable, instrument="MAPS"):
     """
