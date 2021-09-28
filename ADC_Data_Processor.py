@@ -53,6 +53,33 @@ def Packet_Preprocessing(Packet_Data):  #Split each packet into its frames
     Processed_Packets.pop(0) #remove the first packet as its always empty
     return Processed_Packets
 
+def HeaderProcessor(Packet_Data): # extracts header data and returns the output
+    FrameTime_Days=0
+    FrameTime_Hours=0
+    FrameTime_Mins=0
+    FrameTime_Secs=0
+    FrameTime_mS=0
+    FrameTime_uS=0
+    FrameTime_nS=0
+
+    FrameTime = 0 # time (since Epoch in NS) of the frame event, calculated from each part of the time.
+    PeriodNumber = Packet_Data[0:0] #period number for the frame data
+    FrameLenght = 0; #lenght of the frame data within this packet
+    FrameNumber = 0; #number of this frame
+
+    FrameTime = 0  # time (since Epoch in NS) of the frame event
+
+    return FrameNumber, FrameLenght, FrameTime, PeriodNumber
+
+def PacketProcessor_MAPS(Packet_Data, WiringTable): #Pulls the event data out of the streamed packets
+    #Note this function only gets MAPs Data from the event packet - Time from TOF, PulseHeight, Position
+
+    return
+
+def WiringTableReader(CSV_File_Location): #Reads in the CSV containing wiring table information
+    IP_Add_Info = {'ADC_REF': "", 'Stream_IP': "",'CH':"",'Detector_ID':"",'Detector_Len':""}
+
+    return IP_Add_Info
 
 def Serialise_EV42_ISIS_Data(period_number, run_state, proton_charge, source_name, message_id,pulse_time, time_of_flight, detector_id):
     """
