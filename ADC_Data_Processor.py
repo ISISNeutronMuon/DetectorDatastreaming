@@ -26,50 +26,57 @@ def data_split_dict_channel_ip_combine(kafka_data, ch_list):
                         donothing = 0
                         #print(int(int(list_line[i + 29:i + 32], 16) / 16))
 
-def Multi_Packet_Preprocessing(all_data):
-    current_data = {'packet': "", 'packet_info': ""}
-    ip_data = {'packet': "", 'packet_info': ""}
-    for i in range(0, 1):
-        current_data['packet'] = ((all_data[i].get("packet")).replace(HEADER_STRING, "\n" + HEADER_STRING) \
-                                  .replace(END_HEADER, "\n" + END_HEADER)) #add "/n" next to each header
-        print("Pre Line", current_data['packet'])
-        current_data['packet_info'] = all_data[i].get("packet_info")
-        current_data['packet'] = current_data.get("packet").splitlines()  # turn carriage return string into a list
-        current_data['packet'] = [e[128:] for e in current_data.get("packet")]  # remove the header from the list
-        print("Post Line", current_data['packet'])
-        if current_data.get("packet_info") in ip_data:
-            ip_data[current_data.get("packet_info")] = ip_data[current_data.get("packet_info")] \
-                                                       + current_data.get("packet")
-        else:
-            ip_data[current_data.get("packet_info")] = current_data.get("packet")
-
-    return ip_data
-
 def Packet_Preprocessing(Packet_Data):  #Split each packet into its frames
-    #print(Packet_Data)
     Processed_Packet = Packet_Data.replace(HEADER_STRING, ":") #replace all occurances of the frame header string in the packet with ":", this will tell us where to split the packet later on
     Processed_Packet = Processed_Packet.replace(END_HEADER, ":") #replace all occurances of the frame END_header string in the packet with ":", this will tell us where to split the packet later on
     Processed_Packets = Processed_Packet.split(":") #Split the packet into a list, where each ":" has occured
     Processed_Packets.pop(0) #remove the first packet as its always empty
-    return Processed_Packets
+    return Packet_Data
 
-def HeaderProcessor(Packet_Data): # extracts header data and returns the output
-    FrameTime_Days=0
-    FrameTime_Hours=0
-    FrameTime_Mins=0
-    FrameTime_Secs=0
-    FrameTime_mS=0
-    FrameTime_uS=0
-    FrameTime_nS=0
+def HeaderProcessor(Packet_ToProcess): # extracts header data and returns the output
+
+    PacketHeader = Packet_ToProcess[0:128]              #Extract the first 128 Chars from packet - this is the header part
+    binary_header = bin(int(PacketHeader, base=16))     #Convert the Hex Header into binary for data extraction
+
+    # Temp Debug additions
+   # print("Packet Header: ",PacketHeader)
+   # print("Header as binary: ",binary_header)
+
+    Days_STR = binary_header[136:145]       # Extract binary from header for FrameTime - Days
+    FrameTime_Days=int(Days_STR,2)          # Convert binary extract into int
+
+    Hours_STR = binary_header[146:150]      # Extract binary from header for FrameTime - Hours
+    FrameTime_Hours=int(Hours_STR,2)        # Convert binary extract into int
+
+    Mins_STR = binary_header[150:156]       # Extract binary from header for FrameTime - Mins
+    FrameTime_Mins=int(Mins_STR,2)          # Convert binary extract into int
+
+    Secs_STR = binary_header[156:162]       # Extract binary from header for FrameTime - Secs
+    FrameTime_Secs=int(Secs_STR,2)          # Convert binary extract into int
+
+    mS_STR = binary_header[164:174]         # Extract binary from header for FrameTime - mS
+    FrameTime_mS=int(mS_STR,2)              # Convert binary extract into int
+
+    uS_STR = binary_header[174:184]         # Extract binary from header for FrameTime - uS
+    FrameTime_uS=int(uS_STR,2)              # Convert binary extract into int
+
+    nS_STR = binary_header[194:204]         # Extract binary from header for FrameTime - nS
+    FrameTime_nS=int(nS_STR,2)
+    print("FrameTime Info: ",FrameTime_Days,":",FrameTime_Hours,":",FrameTime_Mins,":",FrameTime_Secs,":",FrameTime_mS,":",FrameTime_uS,":",FrameTime_nS)
+
+
+
 
     FrameTime = 0 # time (since Epoch in NS) of the frame event, calculated from each part of the time.
-    PeriodNumber = Packet_Data[0:0] #period number for the frame data
-    FrameLenght = 0; #lenght of the frame data within this packet
-    FrameNumber = 0; #number of this frame
+
+
+    PeriodNumber = Packet_Data[0:0] # period number for the frame data
+    FrameLength = 0  # length of the frame data within this packet
+    FrameNumber = 0  # number of this frame
 
     FrameTime = 0  # time (since Epoch in NS) of the frame event
 
-    return FrameNumber, FrameLenght, FrameTime, PeriodNumber
+    return FrameNumber, FrameLength, FrameTime, PeriodNumber
 
 def PacketProcessor_MAPS(Packet_Data, WiringTable): #Pulls the event data out of the streamed packets
     #Note this function only gets MAPs Data from the event packet - Time from TOF, PulseHeight, Position
@@ -114,8 +121,10 @@ def Serialise_EV42(source_name, message_id,pulse_time, time_of_flight, detector_
     EV42 = serialise_ev42(**Event_Data)
     return EV42
 
-start_time = datetime.datetime(year=2021, month=9, day=23, hour=16, minute=0)
-end_time = datetime.datetime(year=2021, month=9, day=23, hour=16, minute=30)
+
+
+start_time = datetime.datetime(year=2021, month=9, day=29, hour=16, minute=0)
+end_time = datetime.datetime(year=2021, month=9, day=29, hour=17, minute=0)
 
 #start_time = (datetime.datetime.now() - datetime.timedelta(minutes=1))
 #end_time = datetime.datetime.now()
@@ -148,16 +157,28 @@ print(Packet_SourceIP[0])
 print("Loop Time:",datetime.datetime.now() - debugt_start)
 debugt_start = datetime.datetime.now()
 
+for i in range(len(Packet_Data)):
+    HeaderProcessor(Packet_Data[i])
+
+print("Header Process Time:",datetime.datetime.now() - debugt_start)
+
+
+
+
+
+
+
+
 #for i in range(0, len(Packet_Data)):
 #    print("Packet IP:" , Packet_SourceIP[i], " data:", Packet_Data[i])
 #print(ip_data[1])
-ch_list = list(range(0,24,1))
+#ch_list = list(range(0,24,1))
 
 
 #data_split_dict_channel_ip_combine(ip_data,ch_list)
-print("Line Decode Time:",datetime.datetime.now() - debugt_start)
-debugt_start = datetime.datetime.now()
-Flatbuffertestdata = Serialise_EV42_ISIS_Data(4,1,1.35,"MAPs_DECT_C1-PK1-T4",3467,100,[1,1,1,1,1,1,2],[100,200,300,400,500,600,700])
+#print("Line Decode Time:",datetime.datetime.now() - debugt_start)
+#debugt_start = datetime.datetime.now()
+#Flatbuffertestdata = Serialise_EV42_ISIS_Data(4,1,1.35,"MAPs_DECT_C1-PK1-T4",3467,100,[1,1,1,1,1,1,2],[100,200,300,400,500,600,700])
 #kafka_helper.send_flatBuffer(Flatbuffertestdata,"MAPS")
 #print("Flatbuffer Data send to Kafka: ", Flatbuffertestdata)
 
