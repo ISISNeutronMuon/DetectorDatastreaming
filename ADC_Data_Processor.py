@@ -45,7 +45,7 @@ def HeaderProcessor(Packet_ToProcess): # extracts header data and returns the ou
     Days_STR = binary_header[136:145]       # Extract binary from header for FrameTime - Days
     FrameTime_Days=int(Days_STR,2)          # Convert binary extract into int
 
-    Hours_STR = binary_header[146:150]      # Extract binary from header for FrameTime - Hours
+    Hours_STR = binary_header[145:150]      # Extract binary from header for FrameTime - Hours
     FrameTime_Hours=int(Hours_STR,2)        # Convert binary extract into int
 
     Mins_STR = binary_header[150:156]       # Extract binary from header for FrameTime - Mins
@@ -62,7 +62,7 @@ def HeaderProcessor(Packet_ToProcess): # extracts header data and returns the ou
 
     nS_STR = binary_header[194:204]         # Extract binary from header for FrameTime - nS
     FrameTime_nS=int(nS_STR,2)
-    print("FrameTime Info: ",FrameTime_Days,":",FrameTime_Hours,":",FrameTime_Mins,":",FrameTime_Secs,":",FrameTime_mS,":",FrameTime_uS,":",FrameTime_nS)
+    # print("FrameTime Info: ",FrameTime_Days,":",FrameTime_Hours,":",FrameTime_Mins,":",FrameTime_Secs,":",FrameTime_mS,":",FrameTime_uS,":",FrameTime_nS)
 
 
 
@@ -82,6 +82,13 @@ def PacketProcessor_MAPS(Packet_Data, WiringTable): #Pulls the event data out of
     #Note this function only gets MAPs Data from the event packet - Time from TOF, PulseHeight, Position
 
     return
+
+def GroupPacketByIP(Packet_IPAddress, Packet_Contents):
+    ip_data = {"IP_Address":"","Packet_Data":""}
+    for i in range(len(Packet_IPAddress)):
+        if Packet_IPAddress[i] in ip_data["IP_Address"]:
+
+    return ip_data
 
 def WiringTableReader(CSV_File_Location): #Reads in the CSV containing wiring table information
     IP_Add_Info = {'ADC_REF': "", 'Stream_IP': "",'CH':"",'Detector_ID':"",'Detector_Len':""}
