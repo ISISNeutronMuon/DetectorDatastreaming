@@ -1,0 +1,4 @@
+include LICENSE
+include requirements*.*
+include Makefile
+include README.md
