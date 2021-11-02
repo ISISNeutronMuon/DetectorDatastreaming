@@ -16,7 +16,7 @@
 from confluent_kafka import Producer
 
 SERVER = "itachi.isis.cclrc.ac.uk:9092"
-TOPIC = "{}MAPSTEST_runInfo"
+TOPIC = "MAPSTEST_runInfo"
 producer = Producer({"bootstrap.servers": SERVER})
 
 def send_flatBuffer(data):
