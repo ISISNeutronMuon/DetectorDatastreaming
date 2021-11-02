@@ -1,5 +1,14 @@
 # Detector Datastreaming
-Software for streaming data from detectors and analysing it 
+This is a collection of python scripts for allowing the IESG to stream ISIS Neutron Data into mantid. There are multiple different scripts with different uses, listed below:
+- ADC_Data_Processor.py - Used to process the raw ADC packets into event data in the EV42 Flatbuffer schema
+- Kafka_helper.py - user to send data to Kafka
+- Mutliple_MADC_DAEStreams_to_Kafka.py - Streams multiple MADCs to Kafka
+- Kafka_Start_Run.py - Used to generate a start point within the Kafka topic - testing use only
+- Kafka_Stop_Run.py - Used to generate a stop point within the Kafka topic - testing use only
+
+There are multiple files used by the code that are used to configure it, for different ISIS instruments
+- MADC_Boards.csv - Reads in all streaming boards within the system
+- DAES_WiringTable_Instrument.csv - tells the data processor how to map ADC channels to Mantid detector arrays
 
 ## How to use the Kafka helper
 

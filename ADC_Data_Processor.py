@@ -2,7 +2,7 @@ import cProfile
 import pstats
 
 import kafka_helper     # import Kafka Help - used to pull and push data
-from streaming_data_types.eventdata_ev42 import serialise_ev42, deserialise_ev42 # import ESS Flatbuffer serialiser
+from streaming_data_types.eventdata_ev42 import serialise_ev42 # import ESS Flatbuffer serialiser
 import datetime         # import datetime for performance information
 import csv
 import pandas as pd
