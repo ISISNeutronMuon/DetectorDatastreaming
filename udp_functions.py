@@ -2,6 +2,7 @@ import socket
 import data_proc_func
 import kafka_helper
 import matplotlib.pyplot as plt
+import ADC_Data_Processor
 
 HEADER_STRING = "ffffffffffffffff0"
 END_HEADER = "efffffffffffffff0"
@@ -136,7 +137,7 @@ def kafka_slim_single_thread_udp_receiver_MultiMerlin(stop, PACKET_COUNT,instanc
                 PACKET_COUNT = PACKET_COUNT + 1
                 print("FPGA" + str(Stream_IP) + " Packet Count:" + str(PACKET_COUNT))
                 # print(data.hex())
-                kafka_helper.send_data({'packet': data.hex(), 'packet_info': Stream_IP})
+                # kafka_helper.send_data({'packet': data.hex(), 'packet_info': Stream_IP})
         except socket.timeout:
             if stop():
                 # print("thread killed_in")
@@ -148,3 +149,54 @@ def kafka_slim_single_thread_udp_receiver_MultiMerlin(stop, PACKET_COUNT,instanc
             # print("thread killed",instance,"\n",end="\r",flush=True)
             break
     return PACKET_COUNT
+
+
+def MultipleStreamToProcessedEV42(stop, PACKET_COUNT,instance, Stream_Port, Stream_IP):  # ,stream_length):
+    sock = socket.socket(socket.AF_INET,  # Internet
+                         socket.SOCK_DGRAM)  # UDP
+    sock.bind((HOST_IP, Stream_Port,))
+    sock.settimeout(2)
+    print("Thread", instance, "started")
+    totalnumprocessedevents = 0
+    totalnumerror = 0
+    while True:
+        try:
+            if socket.gethostbyname(Stream_IP):
+                data, addr = sock.recvfrom(900400)
+                # ^ set buffer size (did have at 9004 for frame size, not sure if larger helps)
+                PACKET_COUNT = int(PACKET_COUNT) + 1
+                # print("FPGA" + str(Stream_IP) + " Packet Count:" + str(PACKET_COUNT))
+
+                PacketFrames = ADC_Data_Processor.PacketFrameSplitter(data.hex())
+
+                # for each of the frames in the current packet:
+                for f in range(0, len(PacketFrames)):
+                    HeaderData = ADC_Data_Processor.HeaderProcessor(PacketFrames[f])  # process header data - returns list
+                    EventData = PacketFrames[f][128:len(PacketFrames[f])]  # Define event data (framedata - header)
+
+                    # process the frame into events
+
+                    result = ADC_Data_Processor.PacketProcessor_MAPS(EventData, Stream_IP)
+
+                    # push the data into ESS Flatbuffer format
+                    EV42_FrameData = ADC_Data_Processor.Serialise_EV42(Stream_IP, HeaderData[0], HeaderData[2], result[0],
+                                                        result[1])
+                    totalnumerror += result[5]  # get packet processor number of errors
+                    totalnumprocessedevents += int(result[6])  # get packet processor number of events
+                print("Thread:", instance, ", SRC IP:", Stream_IP,", Total Event Errors: ",totalnumerror,", Total Events: ", totalnumprocessedevents)
+                # print(data.hex())
+                # kafka_helper.send_data({'packet': data.hex(), 'packet_info': Stream_IP})
+        except socket.timeout:
+            if stop():
+                # print("thread killed_in")
+                break
+            continue
+            # break
+        if stop():
+            print("Total Packets Received:", instance, PACKET_COUNT, "\n", end="\r", flush=True)
+            # print("thread killed",instance,"\n",end="\r",flush=True)
+            break
+    return PACKET_COUNT
+
+
+# MultipleStreamToProcessedEV42(False, 0, 1 ,48640,"192.168.1.201")

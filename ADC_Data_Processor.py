@@ -70,7 +70,7 @@ def PacketProcessor_MAPS(Packet_Data, SRC_IP):  # Pulls the event data out of th
     Frame_PosOverFlows =[]
     Frame_PulHOverFlows =[]
     Frame_Times = []
-
+    df_WiringTable = WiringTableReader('DAES_WiringTable_TEST.csv')
     IPWiringTable = df_WiringTable.loc[(df_WiringTable['StreamingIP'] == SRC_IP)]
     CH_MantidDectID = IPWiringTable['Mantid_DetectorID_Start'].tolist()
     CH_MantidDectLen = IPWiringTable['Mantid_Detector_ID_Lenght'].tolist()
@@ -146,78 +146,3 @@ def Serialise_EV42(source_name, message_id, pulse_time, time_of_flight, detector
 
     EV42 = serialise_ev42(**Event_Data)
     return EV42
-
-
-
-print("Data Start Time: ", start_time, " Data End Time: ", end_time)
-
-# Collect Kafka Data
-collect_start = datetime.datetime.now()                         # start perf timer
-all_data = kafka_helper.get_data_between(start_time, end_time)  # get kafka data from all MADC's for a given time range
-list_length = len(all_data)                                     # print the overall lenght of the data - number of packets
-print("Number of Packets to Process: ", list_length)            # print info for user
-collect_time = datetime.datetime.now() - collect_start          # Calc total collection time
-
-# Read in instrument DAES wiring table
-df_WiringTable = WiringTableReader('DAES_WiringTable_MAPS.csv')
-
-totalnumerror = 0            # Couter for number of events that reported errors
-totalnumprocessedevents = 0  # Counter for number of processed events
-TotalFrameCount = 0    # Counter for total number of packets
-
-loopstart = datetime.datetime.now() # Get time of processing start
-
-#Process Historic Kafka Data - run for each packet in the kafka data
-with cProfile.Profile() as pr:
-    for packet in range(0, len(all_data)):
-        PacketFrames = PacketFrameSplitter(all_data[packet].get("packet")) # split the packet into list of frames
-        TotalFrameCount += len(PacketFrames)                                    # Add number of frame to running total
-        CurrentFrameSRC = str(all_data[packet].get("packet_info"))          # Get Current Packets source IP
-
-        # for each of the frames in the current packet:
-        for f in range(0, len(PacketFrames)):
-            HeaderData = HeaderProcessor(PacketFrames[f])               # process header data - returns list
-            EventData = PacketFrames[f][128:len(PacketFrames[f])]       # Define event data (framedata - header)
-
-            # process the frame into events
-
-            result = PacketProcessor_MAPS(EventData, all_data[packet].get("packet_info"))
-
-            # push the data into ESS Flatbuffer format
-            EV42_FrameData = Serialise_EV42(CurrentFrameSRC, HeaderData[0], HeaderData[2], result[0], result[1])
-            totalnumerror += result[5]                    # get packet processor number of errors
-            totalnumprocessedevents += int(result[6])     # get packet processor number of events
-
-currenttime = datetime.datetime.now()           #get processing complete time
-overallrun = currenttime - collect_start        #Calculate overall runtime
-processingtime = currenttime - loopstart        #calculate runtime
-
-print("ADC Data Processor Runtime Statistics:")
-print("-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-")
-print("Kafka Collection Time: ", collect_time)
-print("")
-print("Started process: ", loopstart, ", Processing finished: ", currenttime)
-print("Processing Time: ", processingtime)
-print("")
-print("Total Frames: ", TotalFrameCount)
-print("Total Events: ", totalnumprocessedevents)
-print("Total Event Errors: ", totalnumerror)
-print("")
-print("Total Frame Processing Rate: ", TotalFrameCount / processingtime.total_seconds(), " (Frames Per Second)")
-print("Total Event Processing Rate: ", totalnumprocessedevents / processingtime.total_seconds(), " (Events Per Second)")
-
-
-
-stats = pstats.Stats(pr)
-stats.sort_stats(pstats.SortKey.TIME)
-now = datetime.datetime.now()
-profilename = "ProfilingEventHandler"+ now.strftime("D%d_M%m_Y%Y_H%H_M%M_S%S") + ".prof"
-stats.dump_stats(filename=profilename)
-
-
-# print("")
-# now = datetime.datetime.now()
-# csvfilename = "Frames_" + now.strftime("D%d_M%m_Y%Y_H%H_M%M_S%S") + ".csv"
-# print("Saving main DataFrame as: ", csvfilename)
-# df_Frames.to_csv(csvfilename)
-# print("COMPLETE")
