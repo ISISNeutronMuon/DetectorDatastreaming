@@ -97,10 +97,9 @@ def serialise_pl72(
     RunStart.RunStartAddFilename(builder, filename_offset)
     RunStart.RunStartAddNPeriods(builder, 1)
     RunStart.RunStartAddMetadata(builder, metadata_offset)
+    RunStart.RunStartAddControlTopic(builder, control_topic_offset)
     if detector_spectrum_map is not None:
         RunStart.RunStartAddDetectorSpectrumMap(builder, detector_spectrum_map_offset)
-    RunStart.RunStartAddControlTopic(builder, control_topic_offset)
-
     run_start_message = RunStart.RunStartEnd(builder)
 
     builder.Finish(run_start_message, file_identifier=FILE_IDENTIFIER)
