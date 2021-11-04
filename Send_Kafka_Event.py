@@ -14,7 +14,9 @@
 # https://www.eclipse.org/org/documents/epl-v10.php or
 # http://opensource.org/licenses/eclipse-1.0.php
 from confluent_kafka import Producer, Consumer, TopicPartition
-import datetime
+from datetime import datetime
+from dateutil.tz import tzutc
+import uuid
 
 SERVER = "itachi.isis.cclrc.ac.uk:9092"
 TOPIC = "MAPSTEST_events"
@@ -30,6 +32,13 @@ def send_flatBuffer(data):
     producer.produce(TOPIC, data)
     producer.flush()
 
+def _create_consumer():
+    consumer = Consumer(
+        {
+            "bootstrap.servers": SERVER,
+            "group.id": uuid.uuid4(),
+        })
+    return consumer
 
 def get_data_between(start_time: datetime, end_time: datetime, instrument="MAPS"):
     """
@@ -71,6 +80,4 @@ def get_data_between(start_time: datetime, end_time: datetime, instrument="MAPS"
         offsets[1] = consumer.get_watermark_offsets(end_time_part_offset)[1]
 
     number_to_consume = offsets[1] - offsets[0]
-
-    return [json.loads(str(data.value(), encoding="utf-8"))
-            for data in consumer.consume(number_to_consume)]
+    return [consumer.consume(number_to_consume)]
