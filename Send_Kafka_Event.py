@@ -80,4 +80,4 @@ def get_data_between(start_time: datetime, end_time: datetime, instrument="MAPS"
         offsets[1] = consumer.get_watermark_offsets(end_time_part_offset)[1]
 
     number_to_consume = offsets[1] - offsets[0]
-    return [consumer.consume(number_to_consume)]
+    return [data.value() for data in consumer.consume(number_to_consume)]
