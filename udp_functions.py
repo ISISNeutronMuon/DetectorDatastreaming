@@ -3,6 +3,7 @@ import data_proc_func
 import kafka_helper
 import matplotlib.pyplot as plt
 import ADC_Data_Processor
+import Send_Kafka_Event
 
 HEADER_STRING = "ffffffffffffffff0"
 END_HEADER = "efffffffffffffff0"
@@ -181,6 +182,7 @@ def MultipleStreamToProcessedEV42(stop, PACKET_COUNT,instance, Stream_Port, Stre
                     # push the data into ESS Flatbuffer format
                     EV42_FrameData = ADC_Data_Processor.Serialise_EV42(Stream_IP, HeaderData[0], HeaderData[2], result[0],
                                                         result[1])
+                    Send_Kafka_Event.send_flatBuffer(EV42_FrameData)
                     totalnumerror += result[5]  # get packet processor number of errors
                     totalnumprocessedevents += int(result[6])  # get packet processor number of events
                 print("Thread:", instance, ", SRC IP:", Stream_IP,", Total Event Errors: ",totalnumerror,", Total Events: ", totalnumprocessedevents)
