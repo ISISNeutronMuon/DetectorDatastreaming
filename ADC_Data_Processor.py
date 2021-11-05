@@ -5,7 +5,8 @@ import kafka_helper     # import Kafka Help - used to pull and push data
 from streaming_data_types.eventdata_ev42 import serialise_ev42 # import ESS Flatbuffer serialiser
 import datetime         # import datetime for performance information
 import csv
-import pandas as pd
+
+
 
 # set Pandas display configs
 pd.set_option('display.max_colwidth', None)
