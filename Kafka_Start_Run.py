@@ -16,7 +16,7 @@ RunInfo = {
     "instrument_name": "MAPS",
     "broker": "itachi.isis.cclrc.ac.uk:9092",
   #  "metadata": None,
-    "control_topic": "{}MAPSTEST_runInfo",
+    "control_topic": "MAPSTEST_runInfo",
 }
 
 # Serialise and send set to kafka:
