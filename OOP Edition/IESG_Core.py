@@ -2,25 +2,41 @@
 # Core Python Scripts
 #
 # Used to work with IESG hardware within the python environment
+# JJD 05/11/2021
 
-import socket #include socket function for network traffic
-import pandas as pd
-import datetime
+# Main Classes:
+# UDP Functions - core UDP class
+# PC3544 - Merlin ADC class
+# - GPS Slot 0 Commands
+# KafkaFunctions - functions for sending and pulling data from Kafka Topics
+# ESSFlatbuffers - functions for serialising and deserialising flatbuffer messages
 
-Kafka_broker = ""
-kafka_event_topic = ""
-kafka_runinfo_topic = ""
+# Import Required components
+import socket           # include socket function for network traffic
+import pandas as pd     # include pandas for CSV reading and any array functions
+import datetime         # include date time to get date time values as needed.
 
-PC3544_SwitchLookup = ""
+# Define global variables for key info - possibly link from caller?
+
+# Kafka Variables
+Kafka_broker = ""               # Broker for Kafka to use
+kafka_event_topic = ""          # Kafka Topic for Event Data
+kafka_runinfo_topic = ""        # Kafka Topic for run start/stop and control messages
+
+# Instrument Setup Variables
+PC3544_SwitchLookup = ""        # file to lookup Switch addresses to IP address and port
+Instrument_Boards = ""          # file listing all of the boards within the specified system
+Instrument_Wiring_Table = ""    # file location for the streaming wiring table
 
 # Define a Class for all useful UDP functions the group might use
 class UDPFunctions:
-    # define initialisation commanda
+    # define initialisation commands
     def __init__(self,host_ip, host_port, ip_address, port):
         self.IPAddress_Device = ip_address     # set IP to talk to
         self.Port_Device = port                # Set port to use
         self.IPAddress_Host = host_ip
         self.Port_Host = host_port
+        self.UDPSocket = None
 
     # define function to print out socket info
     def info(self):
@@ -52,18 +68,22 @@ class UDPFunctions:
 
         pass
 
-    # Writes a given value to a fiven register address - constructs message and writes to UDP
+    # Writes a given value to a given register address - constructs message and writes to
+    # Register address in hex to write to - starts 0x
+    # value to write - hex value to write - starts 0x
     def register_write(self, register_address, value_to_write):
-        UDPMessage = ""
+        block_len = str(0x0001)
+        UDPMessage = (register_address, " ", block_len, " ", value_to_write)
         UDPFunctions.write(self, UDPMessage)
         pass
 
     def register_read(self, register_address):
-        pass
+        return 1
 
     def register_write_verify(self, register_address, value_to_write):
-
-        pass
+        UDPFunctions.register_write(self, register_address, value_to_write)
+        read_value = UDPFunctions.register_read(register_address)
+        return value_to_write == read_value
 
 # Define Merlin ADC Processor Board Class - all functions for PC3544m4
 class PC3544:
@@ -86,10 +106,16 @@ class PC3544:
 
     def set_gain(self , channel, gain):
         pass
+
     def set_dsp(self):
         pass
+
     def start_streams(self):
         pass
+
+    def stop_streams(self):
+        pass
+
     def get_monitoring(self):
         pass
 
@@ -119,6 +145,8 @@ class PC3544:
 
 
 MADC = UDPFunctions("192.168.1.200","1")
+MADC1 = UDPFunctions("192.168.1.201","1")
+
 MADC.open()
 MADC.set_timeout(1)
 MADC.write("FF")
