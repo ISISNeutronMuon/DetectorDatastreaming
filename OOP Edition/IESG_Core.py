@@ -63,7 +63,8 @@ class UDPFunctions:
     # Write a UDP packet the objects set IPAddress
     def write(self, message):
         self.open()
-        self.UDPSocket.sendto(struct.pack('!q', message), (self.IPAddress_Device, self.Port_Device))
+        message_Inbytes = bytes(message, "utf-8")
+        self.UDPSocket.sendto(message_InBytes, (self.IPAddress_Device, self.Port_Device))
 
         self.close()
 
@@ -219,5 +220,5 @@ Error = ErrorHandler()
 MADC = []
 if __name__ == "__main__":
     UDPTest = UDPFunctions("130.246.49.202",10000,"192.168.1.200",10001)
-    UDPTest.register_write(0x0, 1)
+    UDPTest.register_write("0x0", "0001")
 
