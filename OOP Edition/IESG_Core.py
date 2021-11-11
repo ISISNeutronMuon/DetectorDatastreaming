@@ -219,5 +219,5 @@ Error = ErrorHandler()
 MADC = []
 if __name__ == "__main__":
     UDPTest = UDPFunctions("130.246.49.202",10000,"192.168.1.200",10001)
-    UDPTest.write(0x0000200c0001)
+    UDPTest.register_write(0x0, 1)
 
