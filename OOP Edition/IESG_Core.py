@@ -13,6 +13,7 @@
 
 # Import Required components
 import socket           # include socket function for network traffic
+import struct           # used to encode data for UDP sender
 import pandas as pd     # include pandas for CSV reading and any array functions
 import datetime         # include date time to get date time values as needed.
 
@@ -47,7 +48,7 @@ class UDPFunctions:
     # function to open the UDP port on the computer
     def open(self):
         self.UDPSocket = socket.socket(family=socket.AF_INET, type=socket.SOCK_DGRAM)
-        self.UDPSocket.bind(self.IPAddress_Host, self.Port_Host)
+        self.UDPSocket.bind((self.IPAddress_Host, self.Port_Host))
 
     # function to close the UDP port
     def close(self):
@@ -61,7 +62,10 @@ class UDPFunctions:
 
     # Write a UDP packet the objects set IPAddress
     def write(self, message):
-        self.UDPSocket.sendto(message, (self.IPAddress_Device, self.Port_Device))
+        self.open()
+        self.UDPSocket.sendto(struct.pack('!q', message), (self.IPAddress_Device, self.Port_Device))
+
+        self.close()
 
     # gets data from the UDP socket
     def receive_udp(self):
@@ -93,7 +97,7 @@ class PC3544:
         if switchposition in range(32):             # Validate inputted switch position - within 0-31
             self.switch_pos = int(switchposition)   # If valid get objects switch pos
         else:                                       # If incorrect add error to error list
-            Error.AddError(17, "Value Range Error - Switch Position is out of range, set to 0", True)
+            Error.AddError(17, "Value Range Error - Switch Position is out of range, set to 0")
             self.switch_pos = 0                     # Default to pos 0
 
         self.MADC_IPs = self.get_network_ip()        # Get IP info from the Switch Position
@@ -214,8 +218,6 @@ class ErrorHandler:
 Error = ErrorHandler()
 MADC = []
 if __name__ == "__main__":
-    for SW_POS in range(33):
-        MADC.append(PC3544(SW_POS))
-        print(MADC[SW_POS].get_network_ip())
-        print(MADC[SW_POS].get_network_port())
+    UDPTest = UDPFunctions("130.246.49.202",10000,"192.168.1.200",10001)
+    UDPTest.write(0x0000200c0001)
 
