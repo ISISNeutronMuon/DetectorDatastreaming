@@ -80,6 +80,17 @@ class UDPFunctions:
     # Register address in hex to write to - starts 0x
     # value to write - hex value to write - starts 0x
     def register_write(self, register_address, value_to_write):
+        if register_address[:2] == "0x":                # if register address has the 0x hex identifier
+            register_address = register_address [2:]    # remove it
+
+        if value_to_write[:2] == "0x":               # if values to write has the 0x hex identifier
+            value_to_write = value_to_write [2:]     # remove it
+
+        if not len(value_to_write) % 4:     # if the value to write is in the correct spacing -
+
+            block_size = int(len(value_to_write) / 4)
+
+
         block_len = str(0x0001)
         UDPMessage = (register_address + " " + block_len + " " + value_to_write)
         UDPFunctions.write(self, UDPMessage)
@@ -138,9 +149,10 @@ class PC3544:
         self.network_socket.open()
 
     def set_gain(self , channel, gain):
+
         pass
 
-    def set_dsp(self):
+    def set_dsp_MAPS(self, peakLLD = self.peakLLD):
         pass
 
     def start_streams(self):
@@ -221,8 +233,13 @@ class ErrorHandler:
 
 Error = ErrorHandler()
 MADC = []
+ADC = PC3544(1)
+
+
+for range()
+
+
 if __name__ == "__main__":
     UDPTest = UDPFunctions("192.168.1.125", 10003, "192.168.1.200", 10004)
     # UDPTest.close()
     UDPTest.write('\x00''\x01''\x01''\x22''\x01')
-
