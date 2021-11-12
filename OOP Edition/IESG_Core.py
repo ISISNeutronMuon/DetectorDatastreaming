@@ -63,8 +63,11 @@ class UDPFunctions:
     # Write a UDP packet the objects set IPAddress
     def write(self, message):
         self.open()
-        message_Inbytes = bytes(message, "utf-8")
-        self.UDPSocket.sendto(message_InBytes, (self.IPAddress_Device, self.Port_Device))
+        print("Sending: " + message + " to the MADC")
+        message = bytes(message, "utf-8")
+        print(message)
+        # message = b'\x00'  # 01\x01\x0001'
+        self.UDPSocket.sendto(message, (self.IPAddress_Device, self.Port_Device))
 
         self.close()
 
@@ -78,7 +81,7 @@ class UDPFunctions:
     # value to write - hex value to write - starts 0x
     def register_write(self, register_address, value_to_write):
         block_len = str(0x0001)
-        UDPMessage = (register_address, " ", block_len, " ", value_to_write)
+        UDPMessage = (register_address + " " + block_len + " " + value_to_write)
         UDPFunctions.write(self, UDPMessage)
         pass
 
@@ -219,6 +222,7 @@ class ErrorHandler:
 Error = ErrorHandler()
 MADC = []
 if __name__ == "__main__":
-    UDPTest = UDPFunctions("130.246.49.202",10000,"192.168.1.200",10001)
-    UDPTest.register_write("0x0", "0001")
+    UDPTest = UDPFunctions("192.168.1.125", 10003, "192.168.1.200", 10004)
+    # UDPTest.close()
+    UDPTest.write('\x00''\x01''\x01''\x22''\x01')
 
