@@ -61,12 +61,13 @@ class UDPFunctions:
         self.UDPSocket.settimeout(timeout)
 
     # Write a UDP packet the objects set IPAddress
+    # Takes a message as Hex-Decimal
     def write(self, message):
         self.open()
-        print("Sending: " + message + " to the MADC")
-        message = bytes(message, "utf-8")
-        print(message)
-        # message = b'\x00'  # 01\x01\x0001'
+        # print("Sending: " + message + " to the MADC")
+        # message = bytes(message, "utf-8")
+        # print(message)
+        # # message = b'\x00'  # 01\x01\x0001'
         self.UDPSocket.sendto(message, (self.IPAddress_Device, self.Port_Device))
 
         self.close()
@@ -77,23 +78,64 @@ class UDPFunctions:
         pass
 
     # Writes a given value to a given register address - constructs message and writes to
-    # Register address in hex to write to - starts 0x
-    # value to write - hex value to write - starts 0x
+    # Register address in hex to write to -
+    # value to write - hex value to write -
     def register_write(self, register_address, value_to_write):
+        message = b""   # define the byte array to hold the message to send over UDP
+
         if register_address[:2] == "0x":                # if register address has the 0x hex identifier
-            register_address = register_address [2:]    # remove it
+            register_address = register_address[2:]    # remove it
 
         if value_to_write[:2] == "0x":               # if values to write has the 0x hex identifier
-            value_to_write = value_to_write [2:]     # remove it
+            value_to_write = value_to_write[2:]     # remove it
 
-        if not len(value_to_write) % 4:     # if the value to write is in the correct spacing -
+        register_address_len = len(register_address)
 
-            block_size = int(len(value_to_write) / 4)
+        # if the given address isn't in the correct output byte format - add error and try to fix
+        if register_address_len % 8 != 0:
+            Error.AddError(ErrorNumber=18,
+                           ErrorDesc="Address Error - Incorrect register address length "
+                                     "- added leading 0's in an attempt to resolve",
+                           Severity="NOTICE", printToUser=True)
+            # attempt to fix the error
+            for i in range(8 - register_address_len):           # for amount of leading 0's to add
+                register_address = "0" + register_address       # add leading zero
+                register_address_len = len(register_address)    # correct register length
 
+        # Add the register address to the message to send
+        for i in range(int(register_address_len/2)):
+            char_start = i * 2
+            message += bytes.fromhex(register_address[char_start: char_start+2])
+            print (bytes.fromhex(register_address[char_start: char_start+2]))
 
-        block_len = str(0x0001)
-        UDPMessage = (register_address + " " + block_len + " " + value_to_write)
-        UDPFunctions.write(self, UDPMessage)
+        value_to_write_len = len(value_to_write)                                    # get the length of the users data
+        block_size = int(value_to_write_len / 8) + (value_to_write_len % 8 > 0)     # calc block size add 1 if remainder
+
+        message += block_size.to_bytes(2, byteorder='big')    # add the blocksize to the UDP message
+
+        # for each block of data
+        for block in range(block_size):
+            char_start = block * 8
+            current_block = value_to_write[char_start: char_start+8]
+            if len(current_block) % 8 != 0:
+                Error.AddError(ErrorNumber=17,
+                               ErrorDesc="Value Range Error - Incorrect data length given to register_write "
+                                         "- added leading 0's to attempt to resolve, which is likely to cause "
+                                         "incorrect numbers being written to the PCB",
+                               Severity="ERROR", printToUser=True)
+                # attempt to fix the error
+                for i in range(8 - len(current_block)):  # for amount of leading 0's to add
+                    current_block = "0" + current_block  # add leading zero
+
+            # Add the block to the message to send
+            print(current_block)
+            for i in range(int(len(current_block)/2)):
+                char_start = i * 2
+                message += bytes.fromhex(current_block[char_start: char_start + 2])
+                print(current_block[char_start: char_start + 2], bytes.fromhex(current_block[char_start: char_start + 2]))
+
+        print(message)
+        UDPFunctions.write(self, message)
         pass
 
     def register_read(self, register_address):
@@ -133,7 +175,7 @@ class PC3544:
         return {"BE_FPGA_IP" : BE_FPGA_IP,"FE_FPGA0_IP" : FE_FPGA0_IP,"FE_FPGA1_IP" : FE_FPGA1_IP,
                 "FE_FPGA2_IP" : FE_FPGA2_IP,"FE_FPGA3_IP" : FE_FPGA3_IP}   # return the Addresses as a dictionary
 
-    # Get the network ports the MADC uses from the switch positon
+    # Get the network ports the MADC uses from the switch position
     def get_network_port(self):
         BE_FPGA_PORT = 0                                # Set BE as port 0 - currently not used
         FE_FPGA0_PORT = 48640 + (self.switch_pos * 4)   # Calc FE FPGA0 port number
@@ -145,14 +187,14 @@ class PC3544:
 
     # Configure a network socket for the control connection to the MADC
     def setup_control_network(self):
-        self.network_socket = UDPFunctions(self.control_ipaddress, self.control_port)
-        self.network_socket.open()
+        self.network_socket = UDPFunctions(self.control_ipaddress, self.control_port)   # define network socket object
+        self.network_socket.open()                                                      # open the socket
 
     def set_gain(self , channel, gain):
 
         pass
 
-    def set_dsp_MAPS(self, peakLLD = self.peakLLD):
+    def set_dsp(self):
         pass
 
     def start_streams(self):
@@ -190,20 +232,28 @@ class ErrorHandler:
     def __init__(self):
         self.ErrorNumberList = []
         self.ErrorDescList = []
+        self.ErrorSeverity = []
         print(self.ErrorDescList)
 
-    # Checks to see if the current Error list is valid
+    # Checks to see if the current Error list is valid - returns true if valid
     def CheckErrors_Valid(self):
         if len(self.ErrorNumberList) != len(self.ErrorDescList):
             print("Error List Length Mismatch")
             return False
+        if len(self.ErrorSeverity) != len(self.ErrorNumberList):
+            print("Error List Length Mismatch")
+            return False
+        return True
 
-    def AddError(self, ErrorNumber = 0, ErrorDesc = "unknown error has occured (default)" , printToUser = False):
+    def AddError(self, ErrorNumber = 0, ErrorDesc = "unknown error has occured (default)" ,
+                 Severity = "ERROR",  printToUser = False):
+
         self.ErrorNumberList.append(ErrorNumber)
         self.ErrorDescList.append(ErrorDesc)
+        self.ErrorSeverity.append(Severity)
         self.CheckErrors_Valid()
         if printToUser:
-            print("An error has occured! - (", ErrorNumber, ")", ErrorDesc)
+            print("IESG_Error_Handler: ", Severity, "- (", ErrorNumber, ")", ErrorDesc)
 
     # Function to print all errors to terminal, returns false if an errors are invalid, true if printed
     def PrintAll(self):
@@ -235,11 +285,9 @@ Error = ErrorHandler()
 MADC = []
 ADC = PC3544(1)
 
-
-for range()
-
-
 if __name__ == "__main__":
-    UDPTest = UDPFunctions("192.168.1.125", 10003, "192.168.1.200", 10004)
+    UDPTest = UDPFunctions("130.246.17.182", 10003, "192.168.1.200", 10004)
     # UDPTest.close()
-    UDPTest.write('\x00''\x01''\x01''\x22''\x01')
+  #  UDPTest.write('\x00''\x01''\x01''\x22''\x01')
+    print("Reg address: 0x100100, to write: 10110020010")
+    UDPTest.register_write("0x100100","10110020010")
