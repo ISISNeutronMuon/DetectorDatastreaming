@@ -279,25 +279,24 @@ class ErrorHandler:
         if printToUser:
             self.print_error(len(self.ErrorNumberList)-1)
 
-
     # Function to print all errors to terminal, returns false if an errors are invalid, true if printed
-    def PrintAll(self):
-        if self.CheckErrors_Valid() == False:
+    def print_all(self):
+        if not self.CheckErrors_Valid():
             return False
         if len(self.ErrorNumberList) == 0:
             print("\033[92mProgram currently has 0 errors")
             return True
         else:
             print("Program currently has ", len(self.ErrorNumberList), " errors")
-        for Error in range(len(self.ErrorNumberList)):
-            print("Error ", Error+1, ": ", end = '')
-            self.print_error(Error)
+        for error_number in range(len(self.ErrorNumberList)):
+            print("Error ", error_number, ": ", end='')
+            self.print_error(error_number)
         return True
 
     # Function to print last errors to terminal, returns false if an errors are invalid, true if printed
-    def PrintLast(self):
+    def print_last(self):
         numErrors = len(self.ErrorNumberList)
-        if self.CheckErrors_Valid() == False:
+        if not self.CheckErrors_Valid():
             return False
         if numErrors == 0:
             print("Program currently has 0 errors")
@@ -312,7 +311,7 @@ MADC = []
 ADC = PC3544(1)
 
 if __name__ == "__main__":
-    UDPTest = UDPFunctions("192.168.1.125", 10003, "192.168.1.148", 10002, 10000)
-    # UDPTest.register_write("0x01", "400")
-    # UDPTest.register_read("0x01")
-    Error.PrintAll()
+    UDPTest = UDPFunctions("130.246.17.182", 10003, "192.168.1.148", 10002, 10000)
+    UDPTest.register_write("0x01", "400")
+    UDPTest.register_read("0x01")
+    Error.print_all()
