@@ -32,12 +32,13 @@ Instrument_Wiring_Table = ""    # file location for the streaming wiring table
 # Define a Class for all useful UDP functions the group might use
 class UDPFunctions:
     # define initialisation commands
-    def __init__(self,host_ip, host_port, ip_address, port):
-        self.IPAddress_Device = ip_address     # set IP to talk to
-        self.Port_Device = port                # Set port to use
-        self.IPAddress_Host = host_ip
-        self.Port_Host = host_port
-        self.UDPSocket = None
+    def __init__(self,host_ip, host_port, ip_address, WritePort, ReadPort):
+        self.IPAddress_Device = ip_address      # set IP to talk to
+        self.Write_Port = WritePort             # Set port to write data to
+        self.Read_Port = ReadPort               # set the port used to read data from
+        self.IPAddress_Host = host_ip           # set the IP to send the traffic from
+        self.Port_Host = host_port              # set the port to send the dat from
+        self.UDPSocket = None                   # define the UDP socket object
 
     # define function to print out socket info
     def info(self):
@@ -68,7 +69,7 @@ class UDPFunctions:
         # message = bytes(message, "utf-8")
         # print(message)
         # # message = b'\x00'  # 01\x01\x0001'
-        self.UDPSocket.sendto(message, (self.IPAddress_Device, self.Port_Device))
+        self.UDPSocket.sendto(message, (self.IPAddress_Device, self.Write_Port))
 
         self.close()
 
@@ -87,9 +88,9 @@ class UDPFunctions:
             register_address = register_address[2:]    # remove it
 
         if value_to_write[:2] == "0x":               # if values to write has the 0x hex identifier
-            value_to_write = value_to_write[2:]     # remove it
+            value_to_write = value_to_write[2:]      # remove it
 
-        register_address_len = len(register_address)
+        register_address_len = len(register_address)    # Get length of register address
 
         # if the given address isn't in the correct output byte format - add error and try to fix
         if register_address_len % 8 != 0:
@@ -106,7 +107,6 @@ class UDPFunctions:
         for i in range(int(register_address_len/2)):
             char_start = i * 2
             message += bytes.fromhex(register_address[char_start: char_start+2])
-            print (bytes.fromhex(register_address[char_start: char_start+2]))
 
         value_to_write_len = len(value_to_write)                                    # get the length of the users data
         block_size = int(value_to_write_len / 8) + (value_to_write_len % 8 > 0)     # calc block size add 1 if remainder
@@ -128,14 +128,10 @@ class UDPFunctions:
                     current_block = "0" + current_block  # add leading zero
 
             # Add the block to the message to send
-            print(current_block)
             for i in range(int(len(current_block)/2)):
                 char_start = i * 2
                 message += bytes.fromhex(current_block[char_start: char_start + 2])
-                print(current_block[char_start: char_start + 2], bytes.fromhex(current_block[char_start: char_start + 2]))
-
-        print(message)
-        UDPFunctions.write(self, message)
+        UDPFunctions.write(self, message)   # send the message
         pass
 
     def register_read(self, register_address):
@@ -253,7 +249,13 @@ class ErrorHandler:
         self.ErrorSeverity.append(Severity)
         self.CheckErrors_Valid()
         if printToUser:
-            print("IESG_Error_Handler: ", Severity, "- (", ErrorNumber, ")", ErrorDesc)
+            if Severity == "ERROR":
+                print("\033[91m\033[1mIESG_Error_Handler: ", Severity, "- (", ErrorNumber, ")", ErrorDesc, "\033[0m")
+            elif Severity == "WARNING":
+                print("\033[93m\033[1mIESG_Error_Handler: ", Severity, "- (", ErrorNumber, ")", ErrorDesc, "\033[0m")
+            else:
+                print("\033[1mIESG_Error_Handler: ", Severity, "- (", ErrorNumber, ")", ErrorDesc, "\033[0m")
+
 
     # Function to print all errors to terminal, returns false if an errors are invalid, true if printed
     def PrintAll(self):
@@ -286,5 +288,5 @@ MADC = []
 ADC = PC3544(1)
 
 if __name__ == "__main__":
-    UDPTest = UDPFunctions("192.168.1.125", 10003, "192.168.1.148", 10002)
-    UDPTest.register_write("0x0", "400")
+    UDPTest = UDPFunctions("192.168.1.125", 10003, "192.168.1.148", 10002, 10000)
+    UDPTest.register_write("0x01", "400")
