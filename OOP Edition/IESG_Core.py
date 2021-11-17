@@ -122,7 +122,7 @@ class UDPFunctions:
                                ErrorDesc="Value Range Error - Incorrect data length given to register_write "
                                          "- added leading 0's to attempt to resolve, which is likely to cause "
                                          "incorrect numbers being written to the PCB",
-                               Severity="ERROR", printToUser=True)
+                               Severity="ERROR")
                 # attempt to fix the error
                 for i in range(8 - len(current_block)):  # for amount of leading 0's to add
                     current_block = "0" + current_block  # add leading zero
@@ -135,6 +135,20 @@ class UDPFunctions:
         pass
 
     def register_read(self, register_address):
+        if register_address[:2] == "0x":  # if register address has the 0x hex identifier
+            register_address = register_address[2:]  # remove it
+        register_address_len = len(register_address)  # Get length of register address
+
+        # if the given address isn't in the correct output byte format - add error and try to fix
+        if register_address_len % 8 != 0:
+            Error.AddError(ErrorNumber=18,
+                           ErrorDesc="Address Error - Incorrect register address length "
+                                     "- added leading 0's in an attempt to resolve",
+                           Severity="NOTICE")
+            # attempt to fix the error
+            for i in range(8 - register_address_len):  # for amount of leading 0's to add
+                register_address = "0" + register_address  # add leading zero
+                register_address_len = len(register_address)  # correct register length
         return 1
 
     def register_write_verify(self, register_address, value_to_write):
@@ -186,8 +200,10 @@ class PC3544:
         self.network_socket = UDPFunctions(self.control_ipaddress, self.control_port)   # define network socket object
         self.network_socket.open()                                                      # open the socket
 
-    def set_gain(self , channel, gain):
+    def get_reg_address_map(self, address_map_location= ".\IESG_AddressMap"):
+        pass
 
+    def set_gain(self , channel, gain):
         pass
 
     def set_dsp(self):
@@ -241,6 +257,18 @@ class ErrorHandler:
             return False
         return True
 
+    def print_error(self, error_num):
+        if self.ErrorSeverity[error_num] == "ERROR":
+            print("\033[91m\033[1mIESG_Error_Handler: ", self.ErrorSeverity[error_num],
+                  "- (", self.ErrorNumberList[error_num], ")", self.ErrorDescList[error_num], "\033[0m")
+        elif self.ErrorSeverity[error_num] == "WARNING":
+            print("\033[93m\033[1mIESG_Error_Handler: ", self.ErrorSeverity[error_num],
+                  "- (", self.ErrorNumberList[error_num], ")", self.ErrorDescList[error_num], "\033[0m")
+        else:
+            print("\033[1mIESG_Error_Handler: ", self.ErrorSeverity[error_num], "- (", self.ErrorNumberList[error_num],
+                  ")", self.ErrorDescList[error_num], "\033[0m")
+        return True
+
     def AddError(self, ErrorNumber = 0, ErrorDesc = "unknown error has occured (default)" ,
                  Severity = "ERROR",  printToUser = False):
 
@@ -249,12 +277,7 @@ class ErrorHandler:
         self.ErrorSeverity.append(Severity)
         self.CheckErrors_Valid()
         if printToUser:
-            if Severity == "ERROR":
-                print("\033[91m\033[1mIESG_Error_Handler: ", Severity, "- (", ErrorNumber, ")", ErrorDesc, "\033[0m")
-            elif Severity == "WARNING":
-                print("\033[93m\033[1mIESG_Error_Handler: ", Severity, "- (", ErrorNumber, ")", ErrorDesc, "\033[0m")
-            else:
-                print("\033[1mIESG_Error_Handler: ", Severity, "- (", ErrorNumber, ")", ErrorDesc, "\033[0m")
+            self.print_error(len(self.ErrorNumberList)-1)
 
 
     # Function to print all errors to terminal, returns false if an errors are invalid, true if printed
@@ -262,12 +285,13 @@ class ErrorHandler:
         if self.CheckErrors_Valid() == False:
             return False
         if len(self.ErrorNumberList) == 0:
-            print("Program currently has 0 errors")
+            print("\033[92mProgram currently has 0 errors")
             return True
         else:
             print("Program currently has ", len(self.ErrorNumberList), " errors")
         for Error in range(len(self.ErrorNumberList)):
-            print("Error ", Error, ": ", self.ErrorNumberList[Error], " - ", self.ErrorDescList[Error])
+            print("Error ", Error+1, ": ", end = '')
+            self.print_error(Error)
         return True
 
     # Function to print last errors to terminal, returns false if an errors are invalid, true if printed
@@ -279,7 +303,7 @@ class ErrorHandler:
             print("Program currently has 0 errors")
             return True
         else:
-            print("Program currently has ", numErrors, " errors")
+            print("Program currently has", numErrors, "errors")
             print("The last error was: ", self.ErrorNumberList[numErrors], " - ", self.ErrorDescList[numErrors])
 
 
@@ -289,4 +313,6 @@ ADC = PC3544(1)
 
 if __name__ == "__main__":
     UDPTest = UDPFunctions("192.168.1.125", 10003, "192.168.1.148", 10002, 10000)
-    UDPTest.register_write("0x01", "400")
+    # UDPTest.register_write("0x01", "400")
+    # UDPTest.register_read("0x01")
+    Error.PrintAll()
