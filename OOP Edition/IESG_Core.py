@@ -286,8 +286,5 @@ MADC = []
 ADC = PC3544(1)
 
 if __name__ == "__main__":
-    UDPTest = UDPFunctions("192.168.1.125", 10003, "192.168.1.148", 10004)
-    # UDPTest.close()
-  #  UDPTest.write('\x00''\x01''\x01''\x22''\x01')
-    print("Reg address: 0x100100, to write: 10110020010")
-    UDPTest.register_write("0x12345678","87654321")
+    UDPTest = UDPFunctions("192.168.1.125", 10003, "192.168.1.148", 10002)
+    UDPTest.register_write("0x0", "400")
