@@ -200,7 +200,9 @@ class PC3544:
         self.network_socket = UDPFunctions(self.control_ipaddress, self.control_port)   # define network socket object
         self.network_socket.open()                                                      # open the socket
 
-    def get_reg_address_map(self, address_map_location= ".\IESG_AddressMap"):
+    def get_reg_address_map(self, address_map_location= ".\IESG_AddressMap.csv"):
+        address_map = pd.read_csv(address_map_location)
+        print(address_map)
         pass
 
     def set_gain(self , channel, gain):
@@ -245,7 +247,6 @@ class ErrorHandler:
         self.ErrorNumberList = []
         self.ErrorDescList = []
         self.ErrorSeverity = []
-        print(self.ErrorDescList)
 
     # Checks to see if the current Error list is valid - returns true if valid
     def CheckErrors_Valid(self):
@@ -309,6 +310,7 @@ class ErrorHandler:
 Error = ErrorHandler()
 MADC = []
 ADC = PC3544(1)
+ADC.get_reg_address_map()
 
 if __name__ == "__main__":
     UDPTest = UDPFunctions("130.246.17.182", 10003, "192.168.1.148", 10002, 10000)
