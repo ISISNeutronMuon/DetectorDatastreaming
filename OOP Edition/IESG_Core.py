@@ -14,11 +14,13 @@
 # Import Required components
 import socket  # include socket function for network traffic
 import struct  # used to encode data for UDP sender
+import time
+
 import pandas as pd  # include pandas for CSV reading and any array functions
 import datetime  # include date time to get date time values as needed.
 
 # Define global variables for key info - possibly link from caller?
-HostIP = "130.246.17.182"
+HostIP = "192.168.1.125"
 HostPort = 10003
 # Kafka Variables
 Kafka_broker = ""  # Broker for Kafka to use
@@ -64,7 +66,7 @@ class UDPFunctions:
         self.UDPSocket.settimeout(timeout)
 
     # Write a UDP packet the objects set IPAddress
-    # Takes a message as Hex-Decimal
+    # Takes a message as a byte array
     def write(self, message):
         self.open()
         self.UDPSocket.sendto(message, (self.IPAddress_Device, self.Write_Port))
@@ -72,8 +74,11 @@ class UDPFunctions:
 
     # gets data from the UDP socket
     def receive_udp(self):
-
-        pass
+        self.open()
+        # self.UDPSocket.set_timeout(5)
+        data, address = self.UDPSocket.recvfrom(1024)
+        self.close()
+        return data
 
     # Writes a given value to a given register address - constructs message and writes to
     # Register address in hex to write to -
@@ -129,9 +134,10 @@ class UDPFunctions:
                 char_start = i * 2
                 message += bytes.fromhex(current_block[char_start: char_start + 2])
         UDPFunctions.write(self, message)  # send the message
-        pass
 
-    def register_read(self, register_address):
+    def register_read(self, register_address, block_size):
+        message = b""  # define the byte array to hold the read command message
+
         if register_address[:2] == "0x":  # if register address has the 0x hex identifier
             register_address = register_address[2:]  # remove it
         register_address_len = len(register_address)  # Get length of register address
@@ -146,7 +152,24 @@ class UDPFunctions:
             for i in range(8 - register_address_len):  # for amount of leading 0's to add
                 register_address = "0" + register_address  # add leading zero
                 register_address_len = len(register_address)  # correct register length
-        return 1
+
+        # Add the register address to the read command message to send
+        for i in range(int(register_address_len / 2)):
+            char_start = i * 2
+            message += bytes.fromhex(register_address[char_start: char_start + 2])
+
+        if not isinstance(block_size, int):
+            Error.AddError(ErrorNumber=15, Severity="ERROR", printToUser=True,
+                           ErrorDesc="Value Type Error - block size of UDP Register read not an int, "
+                                     "expected as a int for the number of blocks to read back from the board")
+            return "ERROR"
+        else:
+            message += block_size.to_bytes(2, byteorder='big')  # add the blocksize to the UDP message
+        print(message)
+        UDPFunctions.write(self, message)
+        returned = UDPFunctions.receive_udp(self)
+        print(returned)
+        return
 
     def register_write_verify(self, register_address, value_to_write):
         UDPFunctions.register_write(self, register_address, value_to_write)
@@ -156,7 +179,6 @@ class UDPFunctions:
 
 # Define Merlin ADC Processor Board Class - all functions for PC3544m4
 class PC3544:
-
     # on MADC object creation
     def __init__(self, switchposition):
         if switchposition in range(32):  # Validate inputted switch position - within 0-31
@@ -189,7 +211,7 @@ class PC3544:
     # Get the network ports the MADC uses from the switch position
     def get_network_port(self):
         BE_FPGA_PORT_R = 0  # Set BE read as port 0 - currently not used
-        BE_FPGA_PORT_W = 1  # Set BE write as port 0 - currently not used
+        BE_FPGA_PORT_W = 10002  # Set BE write as port 0 - currently not used
         FE_FPGA0_PORT = 48640 + (self.switch_pos * 4)  # Calc FE FPGA0 port number
         FE_FPGA1_PORT = 48641 + (self.switch_pos * 4)  # Calc FE FPGA1 port number
         FE_FPGA2_PORT = 48642 + (self.switch_pos * 4)  # Calc FE FPGA2 port number
@@ -336,6 +358,11 @@ class ErrorHandler:
         if printToUser:
             self.print_error(len(self.ErrorNumberList) - 1)
 
+    def ClearErrors(self):
+        self.ErrorNumberList = []
+        self.ErrorDescList = []
+        self.ErrorSeverity = []
+
     # Function to print all errors to terminal, returns false if an errors are invalid, true if printed
     def print_all(self):
         if not self.CheckErrors_Valid():
@@ -365,16 +392,18 @@ class ErrorHandler:
 
 Error = ErrorHandler()
 MADC = []
-ADC = PC3544(1)
-ADC.get_reg_address_map()
-ADC.set_gain("1B", "0x255", WriteType="Write")
-ADC.set_gain("6A", 23, WriteType="Write")
-ADC.set_gain("13B", "0x255", WriteType="Write")
-ADC.set_gain("22A", 25, WriteType="Write")
-
+#ADC = PC3544(0)
+# gaintowrite = "0x400"
+# print(ADC.control_ipaddress)
+# starttime = time.time()
+# for channel in range(24):
+#     A_Channel = str(channel) + "A"
+#     B_Channel = str(channel) + "B"
+#     ADC.set_gain(A_Channel, gaintowrite, WriteType="Write")
+#     ADC.set_gain(B_Channel, gaintowrite, WriteType="Write")
+# print("all gain value written, took: ", time.time()-starttime)
 if __name__ == "__main__":
-    print("run as program")
-    # UDPTest = UDPFunctions("192.168.1.148", 10002, 10000)
+    UDPTest = UDPFunctions("192.168.1.148", 10002, 10000)
     # UDPTest.register_write("0x01", "400")
-    # UDPTest.register_read("0x01")
+    UDPTest.register_read("0x0", 1)
     Error.print_all()
