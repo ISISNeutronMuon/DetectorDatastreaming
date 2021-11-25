@@ -309,7 +309,7 @@ class PC3544:
         # filter the address map for the register address to use
         gain_address_map = self.AddressMap[self.AddressMap['Register Function'] == "GAIN"]
         channel_add_map = gain_address_map[
-            gain_address_map["Register Name"] == "FE-CH" + str(FE_FPGA_CH_No) + channel_ab]
+            gain_address_map["Register Name"] == "FE_FPGA-CH" + str(FE_FPGA_CH_No) + channel_ab]
         Register = channel_add_map.iloc[0]["Instance " + str(FE_FPGA_NO)]
 
         if WriteType == "Verify":
@@ -437,14 +437,14 @@ class ErrorHandler:
 
 
 Error = ErrorHandler()  # create error handler object to hold all errors within
-MADC = [PC3544(0) for i in range(10)]
+MADC = [PC3544(0) for i in range(1)]
 
 if __name__ == "__main__":
     starttime = time.time()
     for instance in MADC:
         gaintowrite = "0x800"
         print(instance.control_ipaddress)
-        for channel in range(24):
+        for channel in range(1):
             A_Channel = str(channel) + "A"
             B_Channel = str(channel) + "B"
             print("Setting " + A_Channel + ", to: " + gaintowrite + ", outcome: " +
