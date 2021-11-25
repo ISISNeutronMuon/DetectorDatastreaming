@@ -21,7 +21,10 @@ import datetime  # include date time to get date time values as needed.
 
 # Define global variables for key info - possibly link from caller?
 HostIP = "192.168.1.125"
-HostPort = 10003
+write_register_ports = {"device": 10002, "host": 10003}
+read_command_ports = {"device": 10000, "host": 10001}
+receive_ports = {"device": 10000, "host": 10000}
+
 # Kafka Variables
 Kafka_broker = ""  # Broker for Kafka to use
 kafka_event_topic = ""  # Kafka Topic for Event Data
@@ -36,13 +39,18 @@ Instrument_Wiring_Table = ""  # file location for the streaming wiring table
 # Define a Class for all useful UDP functions the group might use
 class UDPFunctions:
     # define initialisation commands
-    def __init__(self, ip_address, WritePort, ReadPort, host_ip=HostIP, host_port=HostPort):
+    def __init__(self, ip_address, host_ip=HostIP):
         self.IPAddress_Device = ip_address  # set IP to talk to
-        self.Write_Port = WritePort  # Set port to write data to
-        self.Read_Port = ReadPort  # set the port used to read data from
         self.IPAddress_Host = host_ip  # set the IP to send the traffic from
-        self.Port_Host = host_port  # set the port to send the dat from
-        self.UDPSocket = None  # define the UDP socket object
+        # define network sockets
+        self.UDPSocket = None               # generic socket for any use
+        self.UDPSocket_write = None         # define the UDP socket object - writing data
+        self.UDPSocket_receive = None       # define the UDP socket object - receiving data
+        self.UDPSocket_read_command = None  # define the UDP socket object - sending read data command
+        # give object port definitions
+        self.ports_write = write_register_ports
+        self.ports_read_command = read_command_ports
+        self.ports_receive = receive_ports
 
     # define function to print out socket info
     def info(self):
@@ -51,34 +59,46 @@ class UDPFunctions:
         print("Device Info, IP: ", self.IPAddress_Device, ", Port: ", self.Port_Device)
 
     # function to open the UDP port on the computer
-    def open(self):
-        self.UDPSocket = socket.socket(family=socket.AF_INET, type=socket.SOCK_DGRAM)
-        self.UDPSocket.bind((self.IPAddress_Host, self.Port_Host))
+    def open(self, port_type="write", force_host_port=None):
+        if not force_host_port == None:
+            self.UDPSocket = socket.socket(family=socket.AF_INET, type=socket.SOCK_DGRAM)
+            self.UDPSocket.bind((self.IPAddress_Host, force_host_port))
+        elif port_type == "write":
+            self.UDPSocket_write = socket.socket(family=socket.AF_INET, type=socket.SOCK_DGRAM)
+            self.UDPSocket_write.bind((self.IPAddress_Host, self.ports_write["host"]))
+        elif port_type == "receive":
+            self.UDPSocket_receive = socket.socket(family=socket.AF_INET, type=socket.SOCK_DGRAM)
+            self.UDPSocket_receive.bind((self.IPAddress_Host, self.ports_receive["host"]))
+        elif port_type == "read_command":
+            self.UDPSocket_read_command = socket.socket(family=socket.AF_INET, type=socket.SOCK_DGRAM)
+            self.UDPSocket_read_command.bind((self.IPAddress_Host, self.ports_read_command["host"]))
+        else:
+            Error.AddError(ErrorNumber=17,
+                           ErrorDesc="Value Range Error - port type to open given.  "
+                                     "unable to open a port within a port number to open",
+                           Severity="Error", printToUser=True)
 
     # function to close the UDP port
-    def close(self):
-        self.UDPSocket.close()
+    def close(self, port_type="write", force_host_port=None):
+        if None != force_host_port:
+            self.UDPSocket.close()
+        elif port_type == "write":
+            self.UDPSocket_write.close()
+        elif port_type == "receive":
+            self.UDPSocket_receive.close()
+        elif port_type == "read_command":
+            self.UDPSocket_read_command.close()
+        else:
+            Error.AddError(ErrorNumber=17,
+                           ErrorDesc="Value Range Error - port type to open given.  "
+                                     "unable to open a port within a port number to open",
+                           Severity="Error", printToUser=True)
 
     # function to set the timeout time for the UDP socket
     # timeout = None - no timeout set
     # timeout = float - seconds until timeout is reached
     def set_timeout(self, timeout):
         self.UDPSocket.settimeout(timeout)
-
-    # Write a UDP packet the objects set IPAddress
-    # Takes a message as a byte array
-    def write(self, message):
-        self.open()
-        self.UDPSocket.sendto(message, (self.IPAddress_Device, self.Write_Port))
-        self.close()
-
-    # gets data from the UDP socket
-    def receive_udp(self):
-        self.open()
-        # self.UDPSocket.set_timeout(5)
-        data, address = self.UDPSocket.recvfrom(1024)
-        self.close()
-        return data
 
     # Writes a given value to a given register address - constructs message and writes to
     # Register address in hex to write to -
@@ -133,7 +153,9 @@ class UDPFunctions:
             for i in range(int(len(current_block) / 2)):
                 char_start = i * 2
                 message += bytes.fromhex(current_block[char_start: char_start + 2])
-        UDPFunctions.write(self, message)  # send the message
+        self.open(port_type="write")
+        self.UDPSocket_write.sendto(message, (self.IPAddress_Device, self.ports_write["device"]))
+        self.close(port_type="write")
 
     def register_read(self, register_address, block_size):
         message = b""  # define the byte array to hold the read command message
@@ -165,15 +187,36 @@ class UDPFunctions:
             return "ERROR"
         else:
             message += block_size.to_bytes(2, byteorder='big')  # add the blocksize to the UDP message
-        print(message)
-        UDPFunctions.write(self, message)
-        returned = UDPFunctions.receive_udp(self)
-        print(returned)
-        return
 
+        # complete UDP operations
+        UDPFunctions.open(self, port_type="receive")        # open ports
+        UDPFunctions.open(self, port_type="read_command")
+        self.UDPSocket_read_command.sendto(message, (self.IPAddress_Device, self.ports_read_command["device"])) # send read command
+        data, address = self.UDPSocket_receive.recvfrom(1024)       # receive byte array with the data
+        UDPFunctions.close(self, port_type="receive")               # close ports
+        UDPFunctions.close(self, port_type="read_command")
+        returned = data.hex()              # convert byte array into hex string
+        returned = "0x" + returned[12:]    # remove read command from data
+        return returned                    # return the read register value
+
+    # Writes a given value to  given register address and then checks if it was written correctly
     def register_write_verify(self, register_address, value_to_write):
-        UDPFunctions.register_write(self, register_address, value_to_write)
-        read_value = UDPFunctions.register_read(register_address)
+        value_to_write_len = len(value_to_write)
+        block_size = int((value_to_write_len-2) / 8) + ((value_to_write_len - 2) % 8 > 0)  # calc block size
+
+        UDPFunctions.register_write(self, register_address, value_to_write) # write the data
+        read_value = UDPFunctions.register_read(self, register_address=register_address, block_size=block_size) # read register
+
+        # add padding (if required) to value to write to match read val
+        expected_read_len = (block_size * 8) + 2
+        if value_to_write_len % expected_read_len != 0:
+            Error.AddError(ErrorNumber=15,
+                           ErrorDesc="Value type Error - Incorrect data length given to register_write_verify "
+                                     "adding leading zeros to attempt to resolve the issue",
+                           Severity="ERROR")
+            # attempt to fix the error
+            for i in range(expected_read_len - value_to_write_len):  # for amount of leading 0's to add
+                value_to_write = value_to_write[:2] + "0" + value_to_write[2:]  # add leading zero
         return value_to_write == read_value
 
 
@@ -190,11 +233,11 @@ class PC3544:
         self.MADC_IPs = self.get_network_ip()  # Get IP info from the Switch Position
         self.MADC_Ports = self.get_network_port()  # Get port info from the Switch Position
 
-        self.control_ipaddress = self.MADC_IPs["BE_FPGA_IP"]  # Get BE/Control IP from dict
-        self.control_port_W = self.MADC_Ports["BE_FPGA_PORT_W"]  # Get BE/Control port from dict
-        self.control_port_R = self.MADC_Ports["BE_FPGA_PORT_R"]
-        self.control_network = self.setup_control_network()
-        self.AddressMap = self.get_reg_address_map()  # Get the Address Map Information
+        self.control_ipaddress = self.MADC_IPs["BE_FPGA_IP"]        # Get BE/Control IP from dict
+        self.control_port_W = self.MADC_Ports["BE_FPGA_PORT_W"]     # Get BE/Control port from dict
+        self.control_port_R = self.MADC_Ports["BE_FPGA_PORT_R"]     # Get BE/Control port from dict
+        self.AddressMap = self.get_reg_address_map()                # Get the Address Map Information
+        self.control_socket = self.setup_control_network()          # setup control socket
 
     # Function to get the MADC's 5 IP addresses from its switch position
     def get_network_ip(self):
@@ -216,13 +259,13 @@ class PC3544:
         FE_FPGA1_PORT = 48641 + (self.switch_pos * 4)  # Calc FE FPGA1 port number
         FE_FPGA2_PORT = 48642 + (self.switch_pos * 4)  # Calc FE FPGA2 port number
         FE_FPGA3_PORT = 48643 + (self.switch_pos * 4)  # Calc FE FPGA3 port number
-        return {"BE_FPGA_PORT_R": BE_FPGA_PORT_R, "BE_FPGA_PORT_W": BE_FPGA_PORT_W, "FE_FPGA0_PORT": FE_FPGA0_PORT, "FE_FPGA1_PORT": FE_FPGA1_PORT,
+        return {"BE_FPGA_PORT_R": BE_FPGA_PORT_R, "BE_FPGA_PORT_W": BE_FPGA_PORT_W, "FE_FPGA0_PORT": FE_FPGA0_PORT,
+                "FE_FPGA1_PORT": FE_FPGA1_PORT,
                 "FE_FPGA2_PORT": FE_FPGA2_PORT, "FE_FPGA3_PORT": FE_FPGA3_PORT}  # Return ports as a dictionary
 
     # Configure a network socket for the control connection to the MADC
     def setup_control_network(self):
-        control_network = UDPFunctions(self.control_ipaddress, self.control_port_W, self.control_port_R)
-        control_network.open()  # open the socket
+        control_network = UDPFunctions(self.control_ipaddress)
         return control_network  # return the socket
 
     # Gets the register addresses for PC3544 from the AddressMap file
@@ -242,17 +285,17 @@ class PC3544:
                                      "be a str to account for A/B's. - Gain not set")
             return False
         else:
-            channel_ab = input_channel[-1]       # A/B is going to be the last char from the channel string
-            channel_no = int(input_channel[:-1]) # everything else will be the channel number
+            channel_ab = input_channel[-1]  # A/B is going to be the last char from the channel string
+            channel_no = int(input_channel[:-1])  # everything else will be the channel number
 
-        if isinstance(gain, str):           # if set gain is in string format
-            if not gain[:2] == "0x":        # if data is not hex (assume int)
-                gain = hex(int(gain))       # convert to hex and add 0x leader
+        if isinstance(gain, str):  # if set gain is in string format
+            if not gain[:2] == "0x":  # if data is not hex (assume int)
+                gain = hex(int(gain))  # convert to hex and add 0x leader
                 Error.AddError(ErrorNumber=15, Severity="WARNING",
                                ErrorDesc="Value Type Error - if data type is string to set gain, "
                                          "expected hex (with 0x hex leader) converted int into a hex value")
-        elif isinstance(gain, int):     # if gain input is an integer value
-            gain = hex(gain)            # convert int into a hex string
+        elif isinstance(gain, int):  # if gain input is an integer value
+            gain = hex(gain)  # convert int into a hex string
 
         # code to pad out the gain value to full 8 byte word
         LeadingZeros = ""
@@ -260,21 +303,24 @@ class PC3544:
             LeadingZeros += "0"  # add leading zero
         gain = gain[:2] + LeadingZeros + gain[2:]
 
-        FE_FPGA_NO = int(channel_no / 6)                # get FPGA number by dividing the channel by 6 - as ints
-        FE_FPGA_CH_No = channel_no - (FE_FPGA_NO * 6)   # get the ADC channel number on the FPGA
+        FE_FPGA_NO = int(channel_no / 6)  # get FPGA number by dividing the channel by 6 - as ints
+        FE_FPGA_CH_No = channel_no - (FE_FPGA_NO * 6)  # get the ADC channel number on the FPGA
 
         # filter the address map for the register address to use
         gain_address_map = self.AddressMap[self.AddressMap['Register Function'] == "GAIN"]
-        channel_add_map = gain_address_map[gain_address_map["Register Name"] == "FE-CH"+str(FE_FPGA_CH_No)+channel_ab]
+        channel_add_map = gain_address_map[
+            gain_address_map["Register Name"] == "FE-CH" + str(FE_FPGA_CH_No) + channel_ab]
         Register = channel_add_map.iloc[0]["Instance " + str(FE_FPGA_NO)]
 
         if WriteType == "Verify":
-            Verify_Status = self.control_network.register_write_verify(register_address=Register, value_to_write=gain)
-            Error.AddError(ErrorNumber=13, Severity="ERROR", printToUser=True,
-                           ErrorDesc="UDP Verify Error - register verification failed, "
-                                     "incorrect value within register")
+            Verify_Status = self.control_socket.register_write_verify(register_address=Register, value_to_write=gain)
+            if not Verify_Status:
+                Error.AddError(ErrorNumber=13, Severity="ERROR", printToUser=True,
+                               ErrorDesc="UDP Verify Error - register verification failed, "
+                                         "incorrect value within register")
+            return Verify_Status
         elif WriteType == "Write":
-            self.control_network.register_write(register_address=Register, value_to_write=gain)
+            self.control_socket.register_write(register_address=Register, value_to_write=gain)
             return True
         else:
             Error.AddError(ErrorNumber=19, Severity="ERROR", printToUser=True,
@@ -390,20 +436,20 @@ class ErrorHandler:
             print("The last error was: ", self.ErrorNumberList[numErrors], " - ", self.ErrorDescList[numErrors])
 
 
-Error = ErrorHandler()
-MADC = []
-#ADC = PC3544(0)
-# gaintowrite = "0x400"
-# print(ADC.control_ipaddress)
-# starttime = time.time()
-# for channel in range(24):
-#     A_Channel = str(channel) + "A"
-#     B_Channel = str(channel) + "B"
-#     ADC.set_gain(A_Channel, gaintowrite, WriteType="Write")
-#     ADC.set_gain(B_Channel, gaintowrite, WriteType="Write")
-# print("all gain value written, took: ", time.time()-starttime)
+Error = ErrorHandler()  # create error handler object to hold all errors within
+MADC = [PC3544(0) for i in range(10)]
+
 if __name__ == "__main__":
-    UDPTest = UDPFunctions("192.168.1.148", 10002, 10000)
-    # UDPTest.register_write("0x01", "400")
-    UDPTest.register_read("0x0", 1)
+    starttime = time.time()
+    for instance in MADC:
+        gaintowrite = "0x800"
+        print(instance.control_ipaddress)
+        for channel in range(24):
+            A_Channel = str(channel) + "A"
+            B_Channel = str(channel) + "B"
+            print("Setting " + A_Channel + ", to: " + gaintowrite + ", outcome: " +
+                  str(instance.set_gain(A_Channel, gaintowrite)))
+            print("Setting " + B_Channel + ", to: " + gaintowrite + ", outcome: " +
+                  str(instance.set_gain(B_Channel, gaintowrite)))
+    print("all gain value written, took: ", time.time() - starttime)
     Error.print_all()
