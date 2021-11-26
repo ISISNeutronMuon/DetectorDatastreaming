@@ -251,7 +251,7 @@ class PC3544:
     # Function to get the MADC's 5 IP addresses from its switch position
     def get_network_ip(self):
         Possible_BE_IP = [148, 149, 150, 155, 156, 157, 158, 159, 160, 165, 166, 167, 168, 169, 170, 175,
-                          176, 177, 178, 179, 180, 185, 186, 187, 188, 189, 190, 195, 196, 197, 198, 199]
+                          176, 177, 178, 179, 180, 185, 186, 187, 188, 189, 190, 195, 196, 197, 198, 199, 200]
         BE_FPGA_IP = "192.168.1." + str(Possible_BE_IP[self.switch_pos])  # BE IP = 192.168.1. Matching end number
         FE_FPGA0_IP = "192.168.2." + str(100 + (self.switch_pos * 4))  # Calc FE FPGA0 IP
         FE_FPGA1_IP = "192.168.2." + str(101 + (self.switch_pos * 4))  # Calc FE FPGA1 IP
@@ -340,12 +340,12 @@ class PC3544:
                 success_list.append(False)
         if write_flash:
             channel_add_map = gain_address_map[
-                gain_address_map["Register Name"] == "FE_FLASH-CH" + str(FE_FPGA_CH_No) + channel_ab]
+                gain_address_map["Register Name"] == "FE_FLASH-CH" + input_channel]
             register_addresses = [channel_add_map.iloc[0]["Instance " + str(i)] for i in range(4)]
             GainBlocks = [("0x000000" + gain[(i*2)+2:(i*2)+4]) for i in range(4)]
             if WriteType == "Verify":
                 Verify_Status = [self.control_socket.register_write_verify(register_address=register_addresses[i],
-                                                                           value_to_write=GainBlocks[i], delay=0.5)
+                                                                           value_to_write=GainBlocks[i], delay=0.1)
                                  for i in range(4)]
                 print("Gain verify stat: " + str(Verify_Status))
                 success_list.append(Verify_Status)
@@ -356,7 +356,7 @@ class PC3544:
                                              "incorrect value within register")
             elif WriteType == "Write":
                 Verify_Status = [self.control_socket.register_write(register_address=register_addresses[i],
-                                                                    value_to_write=GainBlocks[i], delay=0.2)
+                                                                    value_to_write=GainBlocks[i], delay=0.1)
                                  for i in range(4)]
                 success_list.append(True)
             else:
@@ -480,20 +480,11 @@ MADC = [PC3544(0) for i in range(1)]
 if __name__ == "__main__":
     starttime = time.time()
     ADC = PC3544(0)
+    # ADC.set_gain("6B", "0x12345678",WriteType="Write", write_FPGA=False, write_flash=True)
     for channel in range(24):
         A_Channel = str(channel) + "A"
         B_Channel = str(channel) + "B"
-        print(A_Channel+": "+str(ADC.set_gain(A_Channel, "0x400", WriteType="Verify", write_FPGA=True, write_flash=True)) +
-              " "+B_Channel+": "+str(ADC.set_gain(B_Channel, "0x400", WriteType="Verify", write_FPGA=True, write_flash=True)))
-    # for instance in MADC:
-    #     gaintowrite = "0x800"
-    #     print(instance.control_ipaddress)
-    #     for channel in range(1):
-    #         A_Channel = str(channel) + "A"
-    #         B_Channel = str(channel) + "B"
-    #         print("Setting " + A_Channel + ", to: " + gaintowrite + ", outcome: " +
-    #               str(instance.set_gain(A_Channel, gaintowrite)))
-    #         print("Setting " + B_Channel + ", to: " + gaintowrite + ", outcome: " +
-    #               str(instance.set_gain(B_Channel, gaintowrite)))
+        print(A_Channel+": "+str(ADC.set_gain(A_Channel, "0xbeef", WriteType="Verify", write_FPGA=True, write_flash=True)) +
+              " "+B_Channel+": "+str(ADC.set_gain(B_Channel, "0xcafe", WriteType="Verify", write_FPGA=True, write_flash=True)))
     print("all gain value written, took: ", time.time() - starttime)
     Error.print_all()
