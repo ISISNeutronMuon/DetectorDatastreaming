@@ -103,7 +103,7 @@ class UDPFunctions:
     # Writes a given value to a given register address - constructs message and writes to
     # Register address in hex to write to -
     # value to write - hex value to write -
-    def register_write(self, register_address, value_to_write):
+    def register_write(self, register_address, value_to_write, delay=0):
         message = b""  # define the byte array to hold the message to send over UDP
 
         if register_address[:2] == "0x":  # if register address has the 0x hex identifier
@@ -155,6 +155,7 @@ class UDPFunctions:
                 message += bytes.fromhex(current_block[char_start: char_start + 2])
         self.open(port_type="write")
         self.UDPSocket_write.sendto(message, (self.IPAddress_Device, self.ports_write["device"]))
+        time.sleep(delay)
         self.close(port_type="write")
 
     def register_read(self, register_address, block_size):
@@ -200,12 +201,14 @@ class UDPFunctions:
         return returned                    # return the read register value
 
     # Writes a given value to  given register address and then checks if it was written correctly
-    def register_write_verify(self, register_address, value_to_write):
+    def register_write_verify(self, register_address, value_to_write, delay=0):
         value_to_write_len = len(value_to_write)
         block_size = int((value_to_write_len-2) / 8) + ((value_to_write_len - 2) % 8 > 0)  # calc block size
 
-        UDPFunctions.register_write(self, register_address, value_to_write) # write the data
+        UDPFunctions.register_write(self, register_address, value_to_write, delay=delay) # write the data
+        time.sleep(delay)
         read_value = UDPFunctions.register_read(self, register_address=register_address, block_size=block_size) # read register
+        time.sleep(delay)
 
         # add padding (if required) to value to write to match read val
         expected_read_len = (block_size * 8) + 2
@@ -217,6 +220,12 @@ class UDPFunctions:
             # attempt to fix the error
             for i in range(expected_read_len - value_to_write_len):  # for amount of leading 0's to add
                 value_to_write = value_to_write[:2] + "0" + value_to_write[2:]  # add leading zero
+
+        if read_value == '0xdeadbeef':
+            Error.AddError(ErrorNumber=20, printToUser=True,
+                           ErrorDesc="Register Read Error - read back ""0xdeadbeef"" from the register read, "
+                                     "this is generally caused by a flash fault",
+                           Severity="WARNING")
         return value_to_write == read_value
 
 
@@ -278,7 +287,8 @@ class PC3544:
     # channel = #x where # is the channel number, and x is A or B
     # gain, value to write - converted to hex if no 0x leader
     # returns true if sucessful, false on failure
-    def set_gain(self, input_channel, gain, WriteType="Verify"):
+    def set_gain(self, input_channel, gain, WriteType="Verify", write_FPGA=True, write_flash=False):
+        success_list = []   # list to hold if each register write type completed correctly
         if not isinstance(input_channel, str):
             Error.AddError(ErrorNumber=15, Severity="ERROR", printToUser=True,
                            ErrorDesc="Value Type Error - set gain expected channel number to "
@@ -308,25 +318,53 @@ class PC3544:
 
         # filter the address map for the register address to use
         gain_address_map = self.AddressMap[self.AddressMap['Register Function'] == "GAIN"]
-        channel_add_map = gain_address_map[
-            gain_address_map["Register Name"] == "FE_FPGA-CH" + str(FE_FPGA_CH_No) + channel_ab]
-        Register = channel_add_map.iloc[0]["Instance " + str(FE_FPGA_NO)]
+        if write_FPGA:
+            channel_add_map = gain_address_map[
+                gain_address_map["Register Name"] == "FE_FPGA-CH" + str(FE_FPGA_CH_No) + channel_ab]
+            Register = channel_add_map.iloc[0]["Instance " + str(FE_FPGA_NO)]
 
-        if WriteType == "Verify":
-            Verify_Status = self.control_socket.register_write_verify(register_address=Register, value_to_write=gain)
-            if not Verify_Status:
-                Error.AddError(ErrorNumber=13, Severity="ERROR", printToUser=True,
-                               ErrorDesc="UDP Verify Error - register verification failed, "
-                                         "incorrect value within register")
-            return Verify_Status
-        elif WriteType == "Write":
-            self.control_socket.register_write(register_address=Register, value_to_write=gain)
-            return True
-        else:
-            Error.AddError(ErrorNumber=19, Severity="ERROR", printToUser=True,
-                           ErrorDesc="Command Syntax Error - Unknown register write type given, "
-                                     "expected Verify or Write - no values writen")
-            return False
+            if WriteType == "Verify":
+                Verify_Status = self.control_socket.register_write_verify(register_address=Register, value_to_write=gain)
+                if not Verify_Status:
+                    Error.AddError(ErrorNumber=13, Severity="ERROR", printToUser=True,
+                                   ErrorDesc="UDP Verify Error - register verification failed, "
+                                             "incorrect value within register")
+                success_list.append(Verify_Status)
+            elif WriteType == "Write":
+                self.control_socket.register_write(register_address=Register, value_to_write=gain)
+                success_list.append(True)
+            else:
+                Error.AddError(ErrorNumber=19, Severity="ERROR", printToUser=True,
+                               ErrorDesc="Command Syntax Error - Unknown register write type given, "
+                                         "expected Verify or Write - no values writen")
+                success_list.append(False)
+        if write_flash:
+            channel_add_map = gain_address_map[
+                gain_address_map["Register Name"] == "FE_FLASH-CH" + str(FE_FPGA_CH_No) + channel_ab]
+            register_addresses = [channel_add_map.iloc[0]["Instance " + str(i)] for i in range(4)]
+            GainBlocks = [("0x000000" + gain[(i*2)+2:(i*2)+4]) for i in range(4)]
+            if WriteType == "Verify":
+                Verify_Status = [self.control_socket.register_write_verify(register_address=register_addresses[i],
+                                                                           value_to_write=GainBlocks[i], delay=0.5)
+                                 for i in range(4)]
+                print("Gain verify stat: " + str(Verify_Status))
+                success_list.append(Verify_Status)
+
+                if not all(Verify_Status):
+                    Error.AddError(ErrorNumber=13, Severity="ERROR", printToUser=True,
+                                   ErrorDesc="UDP Verify Error - register verification failed, "
+                                             "incorrect value within register")
+            elif WriteType == "Write":
+                Verify_Status = [self.control_socket.register_write(register_address=register_addresses[i],
+                                                                    value_to_write=GainBlocks[i], delay=0.2)
+                                 for i in range(4)]
+                success_list.append(True)
+            else:
+                Error.AddError(ErrorNumber=19, Severity="ERROR", printToUser=True,
+                               ErrorDesc="Command Syntax Error - Unknown register write type given, "
+                                         "expected Verify or Write - no values writen")
+        return all(success_list)   # return true if everything is successful
+
 
     def set_gain_list(self):
         pass
@@ -441,15 +479,21 @@ MADC = [PC3544(0) for i in range(1)]
 
 if __name__ == "__main__":
     starttime = time.time()
-    for instance in MADC:
-        gaintowrite = "0x800"
-        print(instance.control_ipaddress)
-        for channel in range(1):
-            A_Channel = str(channel) + "A"
-            B_Channel = str(channel) + "B"
-            print("Setting " + A_Channel + ", to: " + gaintowrite + ", outcome: " +
-                  str(instance.set_gain(A_Channel, gaintowrite)))
-            print("Setting " + B_Channel + ", to: " + gaintowrite + ", outcome: " +
-                  str(instance.set_gain(B_Channel, gaintowrite)))
+    ADC = PC3544(0)
+    for channel in range(24):
+        A_Channel = str(channel) + "A"
+        B_Channel = str(channel) + "B"
+        print(A_Channel+": "+str(ADC.set_gain(A_Channel, "0x400", WriteType="Verify", write_FPGA=True, write_flash=True)) +
+              " "+B_Channel+": "+str(ADC.set_gain(B_Channel, "0x400", WriteType="Verify", write_FPGA=True, write_flash=True)))
+    # for instance in MADC:
+    #     gaintowrite = "0x800"
+    #     print(instance.control_ipaddress)
+    #     for channel in range(1):
+    #         A_Channel = str(channel) + "A"
+    #         B_Channel = str(channel) + "B"
+    #         print("Setting " + A_Channel + ", to: " + gaintowrite + ", outcome: " +
+    #               str(instance.set_gain(A_Channel, gaintowrite)))
+    #         print("Setting " + B_Channel + ", to: " + gaintowrite + ", outcome: " +
+    #               str(instance.set_gain(B_Channel, gaintowrite)))
     print("all gain value written, took: ", time.time() - starttime)
     Error.print_all()
