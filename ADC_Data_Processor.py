@@ -9,9 +9,9 @@ import csv
 
 
 # set Pandas display configs
-pd.set_option('display.max_colwidth', None)
-pd.set_option('display.max_columns', None)
-pd.set_option('display.width', None)
+#pd.set_option('display.max_colwidth', None)
+#pd.set_option('display.max_columns', None)
+#pd.set_option('display.width', None)
 
 # set times to process between
 #start_time = datetime.datetime(year=2021, month=10, day=15, hour=10, minute=46)   # Data Collection start time
@@ -52,13 +52,69 @@ def HeaderProcessor(Packet_ToProcess):  # extracts header data and returns the o
     PeriodNo_STR = binary_header[208:224]
     PeriodNumber = int(PeriodNo_STR, 2)
 
+    PeriodSequence_STR = binary_header[192:207]
+    PeriodSequence = int(PeriodSequence_STR, 2)
+
     FrameNo_STR = binary_header[96:128]
     FrameNumber = int(FrameNo_STR, 2)
 
-    EventsInFrame_STR = binary_header[225:256]
+    EventsInFrame_STR = binary_header[224:256]
     EventsInFrame = int(EventsInFrame_STR, 2)
 
-    return FrameNumber, EventsInFrame, FrameTime, PeriodNumber, binary_header
+    TotalRunPPP_STR = binary_header[256:288]
+    TotalRunPPP = int(TotalRunPPP_STR,2)
+
+    veto_frame_data_overrun = False
+    veto_frame_mem_full = False
+    veto_no_frame_sync = False
+    veto_bad_frame = False
+
+    veto_fast_chopper_str = binary_header[307:311]
+    veto_External_str = binary_header[311:315]
+
+    veto_fast_chopper = []
+    veto_External = []
+
+    for char in veto_fast_chopper_str:
+        veto_fast_chopper.append(bool(veto_fast_chopper_str[char]))
+    for char in veto_External_str:
+        veto_External.append(bool(veto_External_str[char]))
+
+    veto_ISIS_Slow = bool(binary_header[315:316])
+    veto_Wrong_Pulse = bool(binary_header[316:317])
+    veto_TS2_Pulse = bool(binary_header[317:318])
+    veto_SMP = bool(binary_header[318:319])
+    veto_FIFO = bool(binary_header[319:320])
+
+    veto_all_bool_vals = []
+    veto_all_naming = []
+
+    veto_all_bool_vals.append(veto_ISIS_Slow)
+    veto_all_naming.append("ISIS Slow")
+
+    veto_all_bool_vals.append(veto_Wrong_Pulse)
+    veto_all_naming.append("Wrong Pulse")
+
+    veto_all_bool_vals.append(veto_TS2_Pulse)
+    veto_all_naming.append("TS2 Pulse")
+
+    veto_all_bool_vals.append(veto_SMP)
+    veto_all_naming.append("SMP")
+
+    veto_all_bool_vals.append(veto_FIFO)
+    veto_all_naming.append("FIFO")
+
+    for veto_num in veto_fast_chopper:
+        veto_all_bool_vals.append(veto_fast_chopper[veto_num])
+        veto_all_naming.append("Fast Chopper - " + veto_num)
+
+    for veto_num in veto_External:
+        veto_all_bool_vals.append(veto_External[veto_num])
+        veto_all_naming.append("External Veto - " + veto_num)
+
+    isVeto = True in veto_all_bool_vals
+
+    return FrameNumber, EventsInFrame, FrameTime, PeriodNumber, PeriodSequence, isVeto, veto_all_bool_vals, veto_all_naming, binary_header
 
 def PacketProcessor_MAPS(Packet_Data, SRC_IP):  # Pulls the event data out of the streamed packets
     # Note this function only gets MAPs Data from the event packet - Time from TOF, Position and pulse height
