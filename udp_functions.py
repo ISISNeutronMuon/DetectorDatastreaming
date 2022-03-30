@@ -5,8 +5,13 @@ import matplotlib.pyplot as plt
 import ADC_Data_Processor
 import Send_Kafka_Event
 import threading
+<<<<<<< Updated upstream
 import datetime
 from influxdb import InfluxDBClient
+=======
+from influxdb import InfluxDBClient
+import datetime
+>>>>>>> Stashed changes
 
 HEADER_STRING = "ffffffffffffffff0"
 END_HEADER = "efffffffffffffff0"
@@ -227,7 +232,11 @@ def MultipleStreamToProcessedEV42(stop, PACKET_COUNT,instance, Stream_Port, Stre
 
                 Event_Difference = abs(numevents_fromheader-packet_Events)
 
+<<<<<<< Updated upstream
                 Influx_json_body.append(
+=======
+                Influx_json_body = [
+>>>>>>> Stashed changes
                     {
                         "measurement": "Python_Streamer",
                         "tags": {
@@ -237,6 +246,7 @@ def MultipleStreamToProcessedEV42(stop, PACKET_COUNT,instance, Stream_Port, Stre
                         },
                         "time": str(datetime.datetime.utcnow()),
                         "fields": {
+<<<<<<< Updated upstream
                             "Events_In_Frame_Header": int(numevents_fromheader),
                             "Packet_Frames": int(len(PacketFrames)),
                             "Packet_Frame_Errors": packet_event_errors,
@@ -250,6 +260,20 @@ def MultipleStreamToProcessedEV42(stop, PACKET_COUNT,instance, Stream_Port, Stre
 #                print("Thread:", instance, ", SRC IP:", Stream_IP,", Total Event Errors: ",totalnumerror,", Total Events: ", totalnumprocessedevents)
 #                print("Events in current frame:", numevents_fromheader, ", num frames: ", len(PacketFrames))
 #                lock.release()
+=======
+                            "Events_In_Frame": int(numevents_fromheader),
+                            "Packet_Frames": int(PacketFrames),
+                            "Packet_Frame_Errors": int(result[5]),
+                            "Packet_Frame_Processed_Event": int(result[6])
+                        }
+                    }
+                ]
+                influxdb_client.write_points(Influx_json_body, database="FESTER", time_precision='ms')
+                lock.acquire()
+                print("Thread:", instance, ", SRC IP:", Stream_IP,", Total Event Errors: ",totalnumerror,", Total Events: ", totalnumprocessedevents)
+                print("Events in current frame:", numevents_fromheader, ", num frames: ", len(PacketFrames))
+                lock.release()
+>>>>>>> Stashed changes
                 # print(data.hex())
                 # kafka_helper.send_data({'packet': data.hex(), 'packet_info': Stream_IP})
         except socket.timeout:
