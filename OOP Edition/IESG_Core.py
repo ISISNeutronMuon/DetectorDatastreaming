@@ -408,7 +408,6 @@ class PC3544:
 # Class for DAE Streaming Code. Handles the recieving and processing of UDP data to Kafka.
 class DAE_Streamer:
     def __init__(self, switchposition=None, FE_FPGA=None, stream_ip=None, stream_port=None):
-
         # try getting the streaming information from the Stream ip and port information
         if stream_ip is not None & stream_port is not None:
             self.ip = stream_ip
@@ -426,10 +425,58 @@ class DAE_Streamer:
             self.ip = "192.168.2." + str(FE_FPGA_IP_Offset[FE_FPGA] + (self.switch_pos * 4))  # Calc stream IP
             self.port = (FE_FPGA_IP_Offset[FE_FPGA] + (self.switch_pos * 4))  # Calc stream Port
 
+        self.stream_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM) # create a network socket
+
+    #sets up network port to be used for streaming
+    def setup_network(self):
+        self.stream_socket.bind(HostIP, self.port)
+        self.stream_socket.settimeout(2)
+
+    # processes an entire network packet
+    def process_network_packet(self, packet):
+        # test that the packet is valid?
+
+        # define lists for data values
+        raw_frame_data = []
+
+        raw_frame_data = self.process_packet_frame_splitter(packet)
+        processed_header_data = [self.process_fheader(frame) for frame in raw_frame_data]
+        processed_event_data = [self.process_fevents_maps(frame) for frame in raw_frame_data]
+        ev42_event_data = [self.process_ev42() for event in range(len(processed_event_data))]
 
 
-                Error.AddError(22, "Function Fallback - only stream IP specified within DAE streamer init. Falling back to SW pos.",
-                               "NOTICE", printToUser=False)
+        return None
+    # splits a given packet into a list of frames
+    def process_packet_frame_splitter(self, packet):
+        return None
+
+    # processes the header of a frame
+    def process_fheader(self, data):
+        return None
+
+    # processes the event data within a frame
+    def process_fevents_maps(self, data):
+        return None
+
+    # processes into ev42 schema
+    def process_ev42(self):
+        return None
+
+    # gets latest network packet
+    def network_get_last_packet(self):
+        # check if packet is available
+        # check source IP matches self.ip
+        # returns None on fault, adds errors
+        return None
+
+    # sends ev42 to Kafka broker
+    def kafka_write_ev42(self):
+        return None
+
+
+
+
+
 
 
 
