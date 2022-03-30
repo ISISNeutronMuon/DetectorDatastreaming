@@ -18,6 +18,7 @@ import time
 
 import pandas as pd  # include pandas for CSV reading and any array functions
 import datetime  # include date time to get date time values as needed.
+from influxdb import InfluxDBClient  # used to log telemetry to the IESG monitoring server
 
 # Define global variables for key info - possibly link from caller?
 HostIP = "192.168.1.125"
@@ -43,9 +44,9 @@ class UDPFunctions:
         self.IPAddress_Device = ip_address  # set IP to talk to
         self.IPAddress_Host = host_ip  # set the IP to send the traffic from
         # define network sockets
-        self.UDPSocket = None               # generic socket for any use
-        self.UDPSocket_write = None         # define the UDP socket object - writing data
-        self.UDPSocket_receive = None       # define the UDP socket object - receiving data
+        self.UDPSocket = None  # generic socket for any use
+        self.UDPSocket_write = None  # define the UDP socket object - writing data
+        self.UDPSocket_receive = None  # define the UDP socket object - receiving data
         self.UDPSocket_read_command = None  # define the UDP socket object - sending read data command
         # give object port definitions
         self.ports_write = write_register_ports
@@ -190,24 +191,26 @@ class UDPFunctions:
             message += block_size.to_bytes(2, byteorder='big')  # add the blocksize to the UDP message
 
         # complete UDP operations
-        UDPFunctions.open(self, port_type="receive")        # open ports
+        UDPFunctions.open(self, port_type="receive")  # open ports
         UDPFunctions.open(self, port_type="read_command")
-        self.UDPSocket_read_command.sendto(message, (self.IPAddress_Device, self.ports_read_command["device"])) # send read command
-        data, address = self.UDPSocket_receive.recvfrom(1024)       # receive byte array with the data
-        UDPFunctions.close(self, port_type="receive")               # close ports
+        self.UDPSocket_read_command.sendto(message, (
+        self.IPAddress_Device, self.ports_read_command["device"]))  # send read command
+        data, address = self.UDPSocket_receive.recvfrom(1024)  # receive byte array with the data
+        UDPFunctions.close(self, port_type="receive")  # close ports
         UDPFunctions.close(self, port_type="read_command")
-        returned = data.hex()              # convert byte array into hex string
-        returned = "0x" + returned[12:]    # remove read command from data
-        return returned                    # return the read register value
+        returned = data.hex()  # convert byte array into hex string
+        returned = "0x" + returned[12:]  # remove read command from data
+        return returned  # return the read register value
 
     # Writes a given value to  given register address and then checks if it was written correctly
     def register_write_verify(self, register_address, value_to_write, delay=0):
         value_to_write_len = len(value_to_write)
-        block_size = int((value_to_write_len-2) / 8) + ((value_to_write_len - 2) % 8 > 0)  # calc block size
+        block_size = int((value_to_write_len - 2) / 8) + ((value_to_write_len - 2) % 8 > 0)  # calc block size
 
-        UDPFunctions.register_write(self, register_address, value_to_write, delay=delay) # write the data
+        UDPFunctions.register_write(self, register_address, value_to_write, delay=delay)  # write the data
         time.sleep(delay)
-        read_value = UDPFunctions.register_read(self, register_address=register_address, block_size=block_size) # read register
+        read_value = UDPFunctions.register_read(self, register_address=register_address,
+                                                block_size=block_size)  # read register
         time.sleep(delay)
 
         # add padding (if required) to value to write to match read val
@@ -242,11 +245,11 @@ class PC3544:
         self.MADC_IPs = self.get_network_ip()  # Get IP info from the Switch Position
         self.MADC_Ports = self.get_network_port()  # Get port info from the Switch Position
 
-        self.control_ipaddress = self.MADC_IPs["BE_FPGA_IP"]        # Get BE/Control IP from dict
-        self.control_port_W = self.MADC_Ports["BE_FPGA_PORT_W"]     # Get BE/Control port from dict
-        self.control_port_R = self.MADC_Ports["BE_FPGA_PORT_R"]     # Get BE/Control port from dict
-        self.AddressMap = self.get_reg_address_map()                # Get the Address Map Information
-        self.control_socket = self.setup_control_network()          # setup control socket
+        self.control_ipaddress = self.MADC_IPs["BE_FPGA_IP"]  # Get BE/Control IP from dict
+        self.control_port_W = self.MADC_Ports["BE_FPGA_PORT_W"]  # Get BE/Control port from dict
+        self.control_port_R = self.MADC_Ports["BE_FPGA_PORT_R"]  # Get BE/Control port from dict
+        self.AddressMap = self.get_reg_address_map()  # Get the Address Map Information
+        self.control_socket = self.setup_control_network()  # setup control socket
 
     # Function to get the MADC's 5 IP addresses from its switch position
     def get_network_ip(self):
@@ -288,7 +291,7 @@ class PC3544:
     # gain, value to write - converted to hex if no 0x leader
     # returns true if sucessful, false on failure
     def set_gain(self, input_channel, gain, WriteType="Verify", write_FPGA=True, write_flash=False):
-        success_list = []   # list to hold if each register write type completed correctly
+        success_list = []  # list to hold if each register write type completed correctly
         if not isinstance(input_channel, str):
             Error.AddError(ErrorNumber=15, Severity="ERROR", printToUser=True,
                            ErrorDesc="Value Type Error - set gain expected channel number to "
@@ -324,7 +327,8 @@ class PC3544:
             Register = channel_add_map.iloc[0]["Instance " + str(FE_FPGA_NO)]
 
             if WriteType == "Verify":
-                Verify_Status = self.control_socket.register_write_verify(register_address=Register, value_to_write=gain)
+                Verify_Status = self.control_socket.register_write_verify(register_address=Register,
+                                                                          value_to_write=gain)
                 if not Verify_Status:
                     Error.AddError(ErrorNumber=13, Severity="ERROR", printToUser=True,
                                    ErrorDesc="UDP Verify Error - register verification failed, "
@@ -342,7 +346,7 @@ class PC3544:
             channel_add_map = gain_address_map[
                 gain_address_map["Register Name"] == "FE_FLASH-CH" + input_channel]
             register_addresses = [channel_add_map.iloc[0]["Instance " + str(i)] for i in range(4)]
-            GainBlocks = [("0x000000" + gain[(i*2)+2:(i*2)+4]) for i in range(4)]
+            GainBlocks = [("0x000000" + gain[(i * 2) + 2:(i * 2) + 4]) for i in range(4)]
             if WriteType == "Verify":
                 Verify_Status = [self.control_socket.register_write_verify(register_address=register_addresses[i],
                                                                            value_to_write=GainBlocks[i], delay=0.1)
@@ -363,8 +367,7 @@ class PC3544:
                 Error.AddError(ErrorNumber=19, Severity="ERROR", printToUser=True,
                                ErrorDesc="Command Syntax Error - Unknown register write type given, "
                                          "expected Verify or Write - no values writen")
-        return all(success_list)   # return true if everything is successful
-
+        return all(success_list)  # return true if everything is successful
 
     def set_gain_list(self):
         pass
@@ -401,6 +404,33 @@ class PC3544:
 
     def set_dest_fpga_ports(self):
         pass
+
+# Class for DAE Streaming Code. Handles the recieving and processing of UDP data to Kafka.
+class DAE_Streamer:
+    def __init__(self, switchposition=None, FE_FPGA=None, stream_ip=None, stream_port=None):
+
+        # try getting the streaming information from the Stream ip and port information
+        if stream_ip is not None & stream_port is not None:
+            self.ip = stream_ip
+            self.port = stream_port
+        # if not directly specified use the SW pos and FE_FPGA numbers
+        elif switchposition is not None & FE_FPGA is not None:
+            if switchposition in range(32):  # Validate inputted switch position - within 0-31
+                self.switch_pos = int(switchposition)  # If valid get objects switch pos
+            else:  # If incorrect add error to error list
+                Error.AddError(17, "Value Range Error - Switch Position is out of range, set to 0")
+                self.switch_pos = 0  # Default to pos 0
+
+            FE_FPGA_IP_Offset = [100,101,102,103]
+            FE_FPGA_PORT_Offset = [48640,48641,48642,48643]
+            self.ip = "192.168.2." + str(FE_FPGA_IP_Offset[FE_FPGA] + (self.switch_pos * 4))  # Calc stream IP
+            self.port = (FE_FPGA_IP_Offset[FE_FPGA] + (self.switch_pos * 4))  # Calc stream Port
+
+
+
+                Error.AddError(22, "Function Fallback - only stream IP specified within DAE streamer init. Falling back to SW pos.",
+                               "NOTICE", printToUser=False)
+
 
 
 # Error Handler class - define once on program start to be able to log all errors within the program
@@ -474,6 +504,24 @@ class ErrorHandler:
             print("The last error was: ", self.ErrorNumberList[numErrors], " - ", self.ErrorDescList[numErrors])
 
 
+# Wrapper to Handle Influx Monitoring within the python environment
+class InfluxDB_IESG_Wrapper:
+    def __init__(self,database, time_precision="ms", host="NDAIESGMonitor.isis.cclrc.ac.uk", port=8086):
+        self.influx_client = InfluxDBClient(host, port)
+
+        self.database = database # database for the wrapper to use
+        self.t_precision = time_precision # precision of the data
+
+        self.json_data = [] #store of data to write to influx
+
+    def write_data(self):
+        self.influx_client.write_points(self.json_data, self.database, self.t_precision)
+
+    def add_json(self, json_to_add):
+        self.json_data.append(json_to_add)
+        return True
+
+
 Error = ErrorHandler()  # create error handler object to hold all errors within
 MADC = [PC3544(0) for i in range(1)]
 
@@ -484,7 +532,9 @@ if __name__ == "__main__":
     for channel in range(24):
         A_Channel = str(channel) + "A"
         B_Channel = str(channel) + "B"
-        print(A_Channel+": "+str(ADC.set_gain(A_Channel, "0xbeef", WriteType="Verify", write_FPGA=True, write_flash=True)) +
-              " "+B_Channel+": "+str(ADC.set_gain(B_Channel, "0xcafe", WriteType="Verify", write_FPGA=True, write_flash=True)))
+        print(A_Channel + ": " + str(
+            ADC.set_gain(A_Channel, "0xbeef", WriteType="Verify", write_FPGA=True, write_flash=True)) +
+              " " + B_Channel + ": " + str(
+            ADC.set_gain(B_Channel, "0xcafe", WriteType="Verify", write_FPGA=True, write_flash=True)))
     print("all gain value written, took: ", time.time() - starttime)
     Error.print_all()
