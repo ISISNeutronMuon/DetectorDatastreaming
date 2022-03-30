@@ -4,6 +4,7 @@ import pstats
 import kafka_helper     # import Kafka Help - used to pull and push data
 from streaming_data_types.eventdata_ev42 import serialise_ev42 # import ESS Flatbuffer serialiser
 import datetime         # import datetime for performance information
+import pandas as pd
 import csv
 
 
@@ -20,11 +21,14 @@ start_time = datetime.datetime(year=2021, month=10, day=20, hour=12, minute=30) 
 end_time = datetime.datetime.now()
 
 HEADER_STRING = "ffffffffffffffff0"
+HEADER_STRING2 = "fffffffffcffffff0"
 END_HEADER = "efffffffffffffff0"
 
 def PacketFrameSplitter(Packet_Data):  # Split each packet into its frames
     Processed_Packet = Packet_Data.replace(HEADER_STRING,
                                            ":" + HEADER_STRING)  # replace all occurances of the frame header string in the packet with ":", this will tell us where to split the packet later on
+    Processed_Packet = Packet_Data.replace(HEADER_STRING2,
+                                           ":" + HEADER_STRING2)  # replace all occurances of the frame header string in the packet with ":", this will tell us where to split the packet later on
     Processed_Packet = Processed_Packet.replace(END_HEADER,
                                                 ":" + END_HEADER)  # replace all occurances of the frame END_header string in the packet with ":", this will tell us where to split the packet later on
     Processed_Packets = Processed_Packet.split(":")  # Split the packet into a list, where each ":" has occured
@@ -75,10 +79,10 @@ def HeaderProcessor(Packet_ToProcess):  # extracts header data and returns the o
     veto_fast_chopper = []
     veto_External = []
 
-    for char in veto_fast_chopper_str:
-        veto_fast_chopper.append(bool(veto_fast_chopper_str[char]))
-    for char in veto_External_str:
-        veto_External.append(bool(veto_External_str[char]))
+    #for char in veto_fast_chopper_str:
+    #    veto_fast_chopper.append(bool(veto_fast_chopper_str[char]))
+    #for char in veto_External_str:
+    #    veto_External.append(bool(veto_External_str[char]))
 
     veto_ISIS_Slow = bool(binary_header[315:316])
     veto_Wrong_Pulse = bool(binary_header[316:317])
@@ -127,7 +131,7 @@ def PacketProcessor_MAPS(Packet_Data, SRC_IP):  # Pulls the event data out of th
     Frame_PosOverFlows =[]
     Frame_PulHOverFlows =[]
     Frame_Times = []
-    df_WiringTable = WiringTableReader('DAES_WiringTable_TEST.csv')
+    df_WiringTable = WiringTableReader('DAES_WiringTable_MAPs.csv')
     IPWiringTable = df_WiringTable.loc[(df_WiringTable['StreamingIP'] == SRC_IP)]
     CH_MantidDectID = IPWiringTable['Mantid_DetectorID_Start'].tolist()
     CH_MantidDectLen = IPWiringTable['Mantid_Detector_ID_Lenght'].tolist()
@@ -163,6 +167,7 @@ def PacketProcessor_MAPS(Packet_Data, SRC_IP):  # Pulls the event data out of th
         else:
             numerror += 1
             print("INVALID EVENT DETECTED, Bad Event: ", Packet_Data[EventStartADD:EventEndADD], " Error SRC IP: ", SRC_IP)
+            print("Packet Data: ", Packet_Data)
 
     return Frame_Times, Frame_Posisitions, Frame_PulHs, Frame_PulHOverFlows, Frame_PosOverFlows, numerror, numprocessedevents
 

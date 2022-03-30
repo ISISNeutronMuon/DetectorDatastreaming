@@ -5,7 +5,7 @@ import csv
 
 stop_threads = False
 #Open the boards in system .csv file
-file = open('MADC_Boards_FESTER.csv')
+file = open('MADC_Boards.csv')
 type(file)
 csvreader = csv.reader(file)
 #determine header info
@@ -43,12 +43,13 @@ print("No. Streaming Ports:",len(StreamingPorts))
 PACKET_COUNT = []
 for i in range(len(StreamingPorts)):
     PACKET_COUNT.append("0")
-
+lock = threading.Lock()
 
 for i in range(len(StreamingPorts)):
   print("Thread Create, PORT:",StreamingPorts[i]," IP:", StreamingIPs[i])
-  udp_thread = threading.Thread(target=udp_functions.MultipleStreamToProcessedEV42, args=((lambda: stop_threads), PACKET_COUNT[i], i, int(StreamingPorts[i]), StreamingIPs[i]))
+  udp_thread = threading.Thread(target=udp_functions.MultipleStreamToProcessedEV42, args=((lambda: stop_threads), PACKET_COUNT[i], i, int(StreamingPorts[i]), StreamingIPs[i], lock))
   udp_thread.start()
+
 
 input("Streams Started, press enter to stop streaming threads" + "\n")  # this makes the precess wait for enter press.
 stop_threads = True

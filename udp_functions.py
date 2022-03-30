@@ -4,6 +4,7 @@ import kafka_helper
 import matplotlib.pyplot as plt
 import ADC_Data_Processor
 import Send_Kafka_Event
+import threading
 
 HEADER_STRING = "ffffffffffffffff0"
 END_HEADER = "efffffffffffffff0"
@@ -152,7 +153,7 @@ def kafka_slim_single_thread_udp_receiver_MultiMerlin(stop, PACKET_COUNT,instanc
     return PACKET_COUNT
 
 
-def MultipleStreamToProcessedEV42(stop, PACKET_COUNT,instance, Stream_Port, Stream_IP):  # ,stream_length):
+def MultipleStreamToProcessedEV42(stop, PACKET_COUNT,instance, Stream_Port, Stream_IP, lock):  # ,stream_length):
     sock = socket.socket(socket.AF_INET,  # Internet
                          socket.SOCK_DGRAM)  # UDP
     sock.bind((HOST_IP, Stream_Port,))
@@ -160,6 +161,7 @@ def MultipleStreamToProcessedEV42(stop, PACKET_COUNT,instance, Stream_Port, Stre
     print("Thread", instance, "started")
     totalnumprocessedevents = 0
     totalnumerror = 0
+    numevents_fromheader = 0;
     while True:
         try:
             if socket.gethostbyname(Stream_IP):
@@ -185,7 +187,12 @@ def MultipleStreamToProcessedEV42(stop, PACKET_COUNT,instance, Stream_Port, Stre
                     Send_Kafka_Event.send_flatBuffer(EV42_FrameData)
                     totalnumerror += result[5]  # get packet processor number of errors
                     totalnumprocessedevents += int(result[6])  # get packet processor number of events
+                    numevents_fromheader = HeaderData[1]
+
+                lock.acquire()
                 print("Thread:", instance, ", SRC IP:", Stream_IP,", Total Event Errors: ",totalnumerror,", Total Events: ", totalnumprocessedevents)
+                print("Events in current frame:", numevents_fromheader, ", num frames: ", len(PacketFrames))
+                lock.release()
                 # print(data.hex())
                 # kafka_helper.send_data({'packet': data.hex(), 'packet_info': Stream_IP})
         except socket.timeout:
