@@ -5,6 +5,8 @@ import matplotlib.pyplot as plt
 import ADC_Data_Processor
 import Send_Kafka_Event
 import threading
+import datetime
+from influxdb import InfluxDBClient
 
 HEADER_STRING = "ffffffffffffffff0"
 END_HEADER = "efffffffffffffff0"
@@ -154,6 +156,9 @@ def kafka_slim_single_thread_udp_receiver_MultiMerlin(stop, PACKET_COUNT,instanc
 
 
 def MultipleStreamToProcessedEV42(stop, PACKET_COUNT,instance, Stream_Port, Stream_IP, lock):  # ,stream_length):
+
+    influxdb_client = InfluxDBClient(host="NDAIESGMonitor.isis.cclrc.ac.uk", port=8086)
+
     sock = socket.socket(socket.AF_INET,  # Internet
                          socket.SOCK_DGRAM)  # UDP
     sock.bind((HOST_IP, Stream_Port,))
@@ -188,7 +193,24 @@ def MultipleStreamToProcessedEV42(stop, PACKET_COUNT,instance, Stream_Port, Stre
                     totalnumerror += result[5]  # get packet processor number of errors
                     totalnumprocessedevents += int(result[6])  # get packet processor number of events
                     numevents_fromheader = HeaderData[1]
-
+                Influx_json_body = [
+                    {
+                        "measurement": "Python_Streamer",
+                        "tags": {
+                            "thread": instance,
+                            "MADC_IP_Address": Stream_IP,
+                            "MADC_Port": Stream_Port
+                        },
+                        "time": str(datetime.datetime.utcnow()),
+                        "fields": {
+                            "Events_In_Frame": int(numevents_fromheader),
+                            "Packet_Frames": int(len(PacketFrames)),
+                            "Packet_Frame_Errors": int(result[5]),
+                            "Packet_Frame_Processed_Event": int(result[6])
+                        }
+                    }
+                ]
+                influxdb_client.write_points(Influx_json_body, database="FESTER", time_precision='ms')
                 lock.acquire()
                 print("Thread:", instance, ", SRC IP:", Stream_IP,", Total Event Errors: ",totalnumerror,", Total Events: ", totalnumprocessedevents)
                 print("Events in current frame:", numevents_fromheader, ", num frames: ", len(PacketFrames))
