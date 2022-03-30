@@ -167,6 +167,9 @@ def MultipleStreamToProcessedEV42(stop, PACKET_COUNT,instance, Stream_Port, Stre
     totalnumprocessedevents = 0
     totalnumerror = 0
     numevents_fromheader = 0;
+
+
+
     while True:
         try:
             if socket.gethostbyname(Stream_IP):
@@ -176,6 +179,12 @@ def MultipleStreamToProcessedEV42(stop, PACKET_COUNT,instance, Stream_Port, Stre
                 # print("FPGA" + str(Stream_IP) + " Packet Count:" + str(PACKET_COUNT))
 
                 PacketFrames = ADC_Data_Processor.PacketFrameSplitter(data.hex())
+
+                #define telemetry values
+                numevents_fromheader=0
+                packet_Events =0
+                packet_event_errors=0
+                Influx_json_body = []
 
                 # for each of the frames in the current packet:
                 for f in range(0, len(PacketFrames)):
@@ -192,8 +201,33 @@ def MultipleStreamToProcessedEV42(stop, PACKET_COUNT,instance, Stream_Port, Stre
                     Send_Kafka_Event.send_flatBuffer(EV42_FrameData)
                     totalnumerror += result[5]  # get packet processor number of errors
                     totalnumprocessedevents += int(result[6])  # get packet processor number of events
-                    numevents_fromheader = HeaderData[1]
-                Influx_json_body = [
+                    numevents_fromheader += HeaderData[1]
+                    packet_Events += int(result[6])
+                    packet_event_errors += result[5]
+
+                    PulH = result[2]
+
+                    for i in range(result[6]):
+                        Influx_json_body.append(
+                            {
+                                "measurement": "Python_Streamer",
+                                "tags": {
+                                    "thread": instance,
+                                    "MADC_IP_Address": Stream_IP,
+                                    "MADC_Port": Stream_Port
+                                },
+                                "time": str(datetime.datetime.utcnow()),
+                                "fields": {
+                                    "Pulse_Height": PulH[i],
+                                    "DectID": result[1][i]
+                                }
+                            }
+                        )
+
+
+                Event_Difference = abs(numevents_fromheader-packet_Events)
+
+                Influx_json_body.append(
                     {
                         "measurement": "Python_Streamer",
                         "tags": {
@@ -203,18 +237,19 @@ def MultipleStreamToProcessedEV42(stop, PACKET_COUNT,instance, Stream_Port, Stre
                         },
                         "time": str(datetime.datetime.utcnow()),
                         "fields": {
-                            "Events_In_Frame": int(numevents_fromheader),
+                            "Events_In_Frame_Header": int(numevents_fromheader),
                             "Packet_Frames": int(len(PacketFrames)),
-                            "Packet_Frame_Errors": int(result[5]),
-                            "Packet_Frame_Processed_Event": int(result[6])
+                            "Packet_Frame_Errors": packet_event_errors,
+                            "Packet_Frame_Processed_Event": packet_Events,
+                            "Event_Difference": Event_Difference
                         }
                     }
-                ]
+                )
                 influxdb_client.write_points(Influx_json_body, database="FESTER", time_precision='ms')
-                lock.acquire()
-                print("Thread:", instance, ", SRC IP:", Stream_IP,", Total Event Errors: ",totalnumerror,", Total Events: ", totalnumprocessedevents)
-                print("Events in current frame:", numevents_fromheader, ", num frames: ", len(PacketFrames))
-                lock.release()
+#                lock.acquire()
+#                print("Thread:", instance, ", SRC IP:", Stream_IP,", Total Event Errors: ",totalnumerror,", Total Events: ", totalnumprocessedevents)
+#                print("Events in current frame:", numevents_fromheader, ", num frames: ", len(PacketFrames))
+#                lock.release()
                 # print(data.hex())
                 # kafka_helper.send_data({'packet': data.hex(), 'packet_info': Stream_IP})
         except socket.timeout:
