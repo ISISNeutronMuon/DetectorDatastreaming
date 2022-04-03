@@ -12,13 +12,22 @@
 # ESSFlatbuffers - functions for serialising and deserialising flatbuffer messages
 
 # Import Required components
+import os
 import socket  # include socket function for network traffic
-import struct  # used to encode data for UDP sender
 import time
+import matplotlib.pyplot as plt
 
 import pandas as pd  # include pandas for CSV reading and any array functions
 import datetime  # include date time to get date time values as needed.
 from influxdb import InfluxDBClient  # used to log telemetry to the IESG monitoring server
+
+from collections import namedtuple
+import flatbuffers
+import streaming_data_types.fbschemas.eventdata_ev42.EventMessage as EventMessage
+import streaming_data_types.fbschemas.eventdata_ev42.FacilityData as FacilityData
+import streaming_data_types.fbschemas.isis_event_info_is84.ISISData as ISISData
+from streaming_data_types.utils import check_schema_identifier
+import numpy as np
 
 # Define global variables for key info - possibly link from caller?
 HostIP = "192.168.1.125"
@@ -194,7 +203,7 @@ class UDPFunctions:
         UDPFunctions.open(self, port_type="receive")  # open ports
         UDPFunctions.open(self, port_type="read_command")
         self.UDPSocket_read_command.sendto(message, (
-        self.IPAddress_Device, self.ports_read_command["device"]))  # send read command
+            self.IPAddress_Device, self.ports_read_command["device"]))  # send read command
         data, address = self.UDPSocket_receive.recvfrom(1024)  # receive byte array with the data
         UDPFunctions.close(self, port_type="receive")  # close ports
         UDPFunctions.close(self, port_type="read_command")
@@ -405,32 +414,46 @@ class PC3544:
     def set_dest_fpga_ports(self):
         pass
 
-# Class for DAE Streaming Code. Handles the recieving and processing of UDP data to Kafka.
-class DAE_Streamer:
-    def __init__(self, switchposition=None, FE_FPGA=None, stream_ip=None, stream_port=None):
+
+# Class for DAE Streaming Code. Handles the receiving and processing of UDP data to Kafka.
+class dae_streamer:
+    def __init__(self, switchposition=None, fe_fpga=None, stream_ip=None, stream_port=None,
+                 setup_wtable_onstartup=True):
         # try getting the streaming information from the Stream ip and port information
-        if stream_ip is not None & stream_port is not None:
+        if stream_ip is not None and stream_port is not None:
             self.ip = stream_ip
             self.port = stream_port
         # if not directly specified use the SW pos and FE_FPGA numbers
-        elif switchposition is not None & FE_FPGA is not None:
+        elif switchposition is not None and fe_fpga is not None:
             if switchposition in range(32):  # Validate inputted switch position - within 0-31
                 self.switch_pos = int(switchposition)  # If valid get objects switch pos
             else:  # If incorrect add error to error list
                 Error.AddError(17, "Value Range Error - Switch Position is out of range, set to 0")
                 self.switch_pos = 0  # Default to pos 0
 
-            FE_FPGA_IP_Offset = [100,101,102,103]
-            FE_FPGA_PORT_Offset = [48640,48641,48642,48643]
-            self.ip = "192.168.2." + str(FE_FPGA_IP_Offset[FE_FPGA] + (self.switch_pos * 4))  # Calc stream IP
-            self.port = (FE_FPGA_IP_Offset[FE_FPGA] + (self.switch_pos * 4))  # Calc stream Port
+            fe_fpga_ip_offset = [100, 101, 102, 103]
+            fe_fpga_port_offset = [48640, 48641, 48642, 48643]
+            self.ip = "192.168.2." + str(fe_fpga_ip_offset[fe_fpga] + (self.switch_pos * 4))  # Calc stream IP
+            self.port = (fe_fpga_port_offset[fe_fpga] + (self.switch_pos * 4))  # Calc stream Port
 
-        self.stream_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM) # create a network socket
+        self.stream_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)  # create a network socket
 
-    #sets up network port to be used for streaming
+        # setup variables for ADC wiring configuration
+        self.CH_MantidDectID = None
+        self.CH_MantidDectLen = None
+        if setup_wtable_onstartup is True:
+            self.setup_wiring_map()
+
+    # sets up network port to be used for streaming
     def setup_network(self):
         self.stream_socket.bind(HostIP, self.port)
         self.stream_socket.settimeout(2)
+
+    def setup_wiring_map(self, wiring_table='DAES_WiringTable_MAPs.csv'):
+        df_wiring_table_full = pd.read_csv(wiring_table)
+        df_wiring_table_ip = df_wiring_table_full.loc[(df_wiring_table_full['StreamingIP'] == self.ip)]
+        self.CH_MantidDectID = df_wiring_table_ip['Mantid_DetectorID_Start'].tolist()
+        self.CH_MantidDectLen = df_wiring_table_ip['Mantid_Detector_ID_Lenght'].tolist()
 
     # processes an entire network packet
     def process_network_packet(self, packet):
@@ -444,40 +467,225 @@ class DAE_Streamer:
         processed_event_data = [self.process_fevents_maps(frame) for frame in raw_frame_data]
         ev42_event_data = [self.process_ev42() for event in range(len(processed_event_data))]
 
+        return None
 
-        return None
+    def process_packet_complete(self, packet_data):
+        packet_frames = self.process_packet_frame_splitter(packet_data)
+        mapped_headers = map(self.process_fheader, packet_frames)
+        header_values = list(mapped_headers)
+        total_event = 0
+        for frame in range(len(packet_frames)):
+            current_frame = packet_frames[frame]
+            events = self.process_multiple_fevents_maps(current_frame)
+            events_time = [event[1] for event in events]
+            detector_ids = [event[0] for event in events]
+            frame_ev42 = self.process_ev42(header_values[frame][0], header_values[frame][2], events_time, detector_ids)
+
+            total_event += len(events_time)
+            # send to kafka
+        return total_event
+
     # splits a given packet into a list of frames
-    def process_packet_frame_splitter(self, packet):
-        return None
+    @staticmethod
+    def process_packet_frame_splitter(packet):
+        header_str = "ffffffffffffffff0"
+        header_str2 = "fffffffffcffffff0"
+        end_marker_str = "efffffffffffffff0"
+        packing_str = "0000000000000000"
+
+        replacement_header_str = ":ffffffffffffffff0"
+        replacement_header_str2 = ":fffffffffcffffff0"
+        replacement_end_marker_str = ""
+        replacement_packing_str = ""
+
+        processed_packet = packet.replace(header_str, replacement_header_str) \
+            .replace(header_str2, replacement_header_str2) \
+            .replace(end_marker_str, replacement_end_marker_str) \
+            .replace(packing_str, replacement_packing_str)
+
+        frames = processed_packet.split(":")
+        frames.pop(0)  # remove first frame as the split occurs at frame start - always empty
+
+        return frames
 
     # processes the header of a frame
-    def process_fheader(self, data):
-        return None
+    @staticmethod
+    def process_fheader(frame_data):
+        frame_header = frame_data[0:128]  # extract header from frame data
+        binary_header = bin(int(frame_header, base=16))[2:]  # convert to bin - remove bin identifier
+
+        # calculate time of frame event in nS - since EPOCH
+        frame_time = int((((365 * 8.64e+13) * int(binary_header[128:136], 2) + 30) +
+                      (int(binary_header[136:145], 2) * 8.64e+13) + (int(binary_header[145:150], 2) * 3.6e+12) +
+                      (int(binary_header[150:156], 2) * 6e+10) + (int(binary_header[156:162], 2) * 1e+9) +
+                      (int(binary_header[162:172], 2) * 1000000) + (int(binary_header[172:182], 2) * 1000) +
+                      int(binary_header[182:192], 2)))
+
+        period_number = int(binary_header[208:224], 2)
+        period_sequence = int(binary_header[192:207], 2)
+        f_number = int(binary_header[96:128], 2)
+        f_number_events = int(binary_header[224:256], 2)
+        ppp = int(binary_header[256:288], 2)
+
+        vetos = {}  # dict holding all veto info
+
+        veto_frame_data_overrun = False
+        veto_frame_mem_full = False
+        veto_no_frame_sync = False
+        veto_bad_frame = False
+
+        vetos["veto_isis_slow"] = binary_header[315:316] == "1"
+        vetos["veto_wrong_pulse"] = binary_header[316:317] == "1"
+        vetos["veto_ts2_pulse"] = binary_header[317:318] == "1"
+        vetos["veto_smp"] = binary_header[318:319] == "1"
+        vetos["veto_fifo"] = binary_header[319:320] == "1"
+
+        veto_fast_chopper_str = binary_header[307:311]
+        veto_external_str = binary_header[311:315]
+        for i in range(len(veto_fast_chopper_str)):
+            vetos[("Fast Chopper - " + str(i))] = veto_fast_chopper_str[i] == "1"
+        for char in range(len(veto_external_str)):
+            vetos[("External - " + str(i))] = veto_external_str[char] == "1"
+
+        is_veto = True in vetos
+
+        return f_number, f_number_events, frame_time, period_number, period_sequence, ppp, is_veto, vetos
 
     # processes the event data within a frame
-    def process_fevents_maps(self, data):
-        return None
+    def process_multiple_fevents_maps(self, data, frame_event_number=None):
+        event_data = data[128:]
+        event_data_len = len(event_data) - event_data.count('\n')
+
+        if event_data_len % 16 != 0:  # if event data is complete - each event is 16 char, -1 for ending \n char
+            Error.AddError(ErrorNumber=22, Severity="ERROR", printToUser=False,
+                           ErrorDesc="Event Data Error - event data not divisible by 16, suspected incomplete"
+                                     " or other frame issue. event data len: " + str(event_data_len))
+            return None
+
+        num_events = int(event_data_len / 16)
+        if frame_event_number is not None and frame_event_number == num_events:
+            Error.AddError(ErrorNumber=23, Severity="ERROR", printToUser=True,
+                           ErrorDesc="Event Number mismatch - number of frames from header and event size do not match")
+            return None
+        processed_events = []
+        for event_i in range(num_events):
+            event_start = event_i * 16
+            event_end = event_start + 16
+            processed_events.append(self.process_single_fevent_maps(event_data[event_start:event_end]))
+        return processed_events
+
+    # processes a single event, returns mantid detector information etc
+    def process_single_fevent_maps(self, event_data):
+        bin_event = bin(int(event_data, base=16))[2:]  # convert hex into binary - remove two char as always 0b
+        if event_data[:2] == "e0":  # if has correct marker
+
+            event_pulse_height_overflow = bin_event[38:39]
+            event_position_overflow = bin_event[39:40]
+
+            event_time_to_frame = int(bin_event[8:32], 2)  # convert binary frame time of event into an int
+            event_position = int(bin_event[52:64], 2)  # convert binary position of the event into an int
+            event_pulse_height = int(bin_event[40:52], 2)  # convert binary pulse height of the event into an int
+            adc_channel = int(bin_event[36:38], 2)  # convert binary channel of the event into an int
+
+            mantid_pixel = int(event_position / (4096 / self.CH_MantidDectLen[adc_channel])) \
+                           + self.CH_MantidDectID[adc_channel]  # Move to mantid tube location
+            return event_time_to_frame, mantid_pixel, event_position, event_pulse_height, event_position_overflow, \
+                   event_pulse_height_overflow
+        else:
+            Error.AddError(ErrorNumber=25, Severity="NOTICE", printToUser=True,
+                           ErrorDesc=(
+                                       "Event Data Error - Missing e0 flag in data to process - SKIPPING: " + event_data))
+            return None
 
     # processes into ev42 schema
-    def process_ev42(self):
-        return None
+    def process_ev42(self, frame_number, frame_time, event_time, detector_id):
+        """
+        Serialise event data as an ev42 FlatBuffers message.
+        :param self:           -source (ip)
+        :param frame_number:      -message ID
+        :param frame_time: -pulse time
+        :param event_time: - list of time of flight
+        :param detector_id:     mantid_detector_id - list
+        # :param isis_specific:
+        :return:
+        """
+        builder = flatbuffers.Builder(1024)
+        builder.ForceDefaults(True)
+
+        source = builder.CreateString(self.ip)
+
+        tof_data = builder.CreateNumpyVector(np.asarray(event_time).astype(np.uint32))
+        det_data = builder.CreateNumpyVector(np.asarray(detector_id).astype(np.uint32))
+
+        # isis_data = None
+        # if isis_specific:
+        # # isis_builder = flatbuffers.Builder(96)
+        #     ISISData.ISISDataStart(builder)
+        # ISISData.ISISDataAddPeriodNumber(builder, isis_specific["period_number"])
+        # ISISData.ISISDataAddRunState(builder, isis_specific["run_state"])
+        # ISISData.ISISDataAddProtonCharge(builder, isis_specific["proton_charge"])
+        # isis_data = ISISData.ISISDataEnd(builder)
+
+        # Build the actual buffer
+        EventMessage.EventMessageStart(builder)
+        EventMessage.EventMessageAddDetectorId(builder, det_data)
+        EventMessage.EventMessageAddTimeOfFlight(builder, tof_data)
+        EventMessage.EventMessageAddPulseTime(builder, frame_time)
+        EventMessage.EventMessageAddMessageId(builder, frame_number)
+        EventMessage.EventMessageAddSourceName(builder, source)
+
+        # if isis_specific:
+        #     EventMessage.EventMessageAddFacilitySpecificDataType(
+        # builder, FacilityData.FacilityData.ISISData
+        #     EventMessage.EventMessageAddFacilitySpecificData(builder, isis_data)
+
+        data = EventMessage.EventMessageEnd(builder)
+
+        builder.Finish(data, file_identifier=b"ev42")
+        return bytes(builder.Output())
 
     # gets latest network packet
     def network_get_last_packet(self):
-        # check if packet is available
-        # check source IP matches self.ip
-        # returns None on fault, adds errors
-        return None
+        try:
+            if socket.gethostbyname(self.ip):
+                packet, source_ip = self.stream_socket.recvfrom(900400)
+        except self.stream_socket.timeout:
+            # no new packet on port
+            packet = None
+            source_ip = None
+        return packet, source_ip
+
+    # reads in data for testing, from a .txt file. if line to read is -1, returns list of example packets
+    def test_read_file_as_packets(self, filename, line_to_read, src_ip=None, file_path=None):
+        # if no source IP is given assume its the objects IP address
+        if src_ip is None:
+            src_ip = self.ip
+
+        if file_path is None:
+            test_file = open(filename, "r")
+        else:
+            file = os.path.join(file_path, filename + ".txt")
+            test_file = open(file, "r")
+
+            packet_list = []
+            source_ip_list = []
+            for line in test_file:
+                packet_list.append(line)
+                source_ip_list.append(src_ip)
+
+        if line_to_read == -1:
+            packet = packet_list
+            source_ip = source_ip_list
+        else:
+            packet = packet_list[line_to_read]
+            source_ip = source_ip_list[line_to_read]
+
+        test_file.close()
+        return packet, source_ip
 
     # sends ev42 to Kafka broker
     def kafka_write_ev42(self):
         return None
-
-
-
-
-
-
 
 
 # Error Handler class - define once on program start to be able to log all errors within the program
@@ -499,10 +707,13 @@ class ErrorHandler:
 
     def print_error(self, error_num):
         if self.ErrorSeverity[error_num] == "ERROR":
-            print("\033[91m\033[1mIESG_Error_Handler: ", self.ErrorSeverity[error_num],
+            print("\033[31m\033[1mIESG_Error_Handler: ", self.ErrorSeverity[error_num],
                   "- (", self.ErrorNumberList[error_num], ")", self.ErrorDescList[error_num], "\033[0m")
         elif self.ErrorSeverity[error_num] == "WARNING":
-            print("\033[93m\033[1mIESG_Error_Handler: ", self.ErrorSeverity[error_num],
+            print("\033[33m\033[1mIESG_Error_Handler: ", self.ErrorSeverity[error_num],
+                  "- (", self.ErrorNumberList[error_num], ")", self.ErrorDescList[error_num], "\033[0m")
+        elif self.ErrorSeverity[error_num] == "NOTICE":
+            print("\033[34m\033[1mIESG_Error_Handler: ", self.ErrorSeverity[error_num],
                   "- (", self.ErrorNumberList[error_num], ")", self.ErrorDescList[error_num], "\033[0m")
         else:
             print("\033[1mIESG_Error_Handler: ", self.ErrorSeverity[error_num], "- (", self.ErrorNumberList[error_num],
@@ -552,14 +763,14 @@ class ErrorHandler:
 
 
 # Wrapper to Handle Influx Monitoring within the python environment
-class InfluxDB_IESG_Wrapper:
-    def __init__(self,database, time_precision="ms", host="NDAIESGMonitor.isis.cclrc.ac.uk", port=8086):
+class InfluxDB_Wrapper:
+    def __init__(self, database, time_precision="ms", host="NDAIESGMonitor.isis.cclrc.ac.uk", port=8086):
         self.influx_client = InfluxDBClient(host, port)
 
-        self.database = database # database for the wrapper to use
-        self.t_precision = time_precision # precision of the data
+        self.database = database  # database for the wrapper to use
+        self.t_precision = time_precision  # precision of the data
 
-        self.json_data = [] #store of data to write to influx
+        self.json_data = []  # store of data to write to influx
 
     def write_data(self):
         self.influx_client.write_points(self.json_data, self.database, self.t_precision)
@@ -570,18 +781,99 @@ class InfluxDB_IESG_Wrapper:
 
 
 Error = ErrorHandler()  # create error handler object to hold all errors within
-MADC = [PC3544(0) for i in range(1)]
+
+
+def test():
+    stream_test = dae_streamer(16, 1)
+    full_test_data = stream_test.test_read_file_as_packets('185_packets', -1,
+                                                           file_path='C:\\GIT\\DetectorDatastreaming\\OOP Edition\\test_data')
+    test_packets = full_test_data[0]  # remove IP address to get raw packet data
+    full_test_packets = []
+    for i in range(1):
+        full_test_packets.extend(test_packets)
+
+    print("Packets read in, packet count: ", len(full_test_packets))
+    print("Perf counter start")
+    timer_s = datetime.datetime.now()
+    test_frames = []
+    for i in range(len(full_test_packets)):
+        test_frames.extend(stream_test.process_packet_frame_splitter(full_test_packets[i]))
+
+    print("Packets splits into frames, total frames: ", len(test_frames))
+
+    mapped_header = map(stream_test.process_fheader, test_frames)
+    header_values = list(mapped_header)
+
+    print("Headers processed, total headers: ", len(header_values))
+
+    test_events_map = map(stream_test.process_multiple_fevents_maps, test_frames)
+    test_events = list(test_events_map)
+    test_all_events = []
+    for event in test_events:
+        if event is not None:
+            test_all_events.extend(event)
+    print("Events processed, total events: ", len(test_events))
+
+    timer_e = datetime.datetime.now()
+    delta = timer_e - timer_s
+    timer = delta.total_seconds()
+    print("Processing complete, Perf counter stop")
+
+    rates = {"Packets": len(full_test_packets) / timer, "Frames": len(test_frames) / timer,
+             "Events": len(test_all_events) / timer}
+
+    sec_per = {"Packets": timer / len(full_test_packets), "Frames": timer / len(test_frames),
+               "Events": timer / len(test_all_events)}
+
+    totals = {"Packets": len(full_test_packets), "Frames": len(test_frames), "Events": len(test_all_events)}
+    print("Task Completed in: ", timer, " Seconds")
+    print("")
+    print("File Processing metrics:")
+    print("%8s: %14s %20s %24s" % ("Type:", "Total:", "Per Second:", "Time Per (Seconds)"))
+    for value in totals:
+        print("%8s: %14s %20s %24s " % (value, totals[value], rates[value], sec_per[value]))
+
+    print("")
+    print("Program Error Check: ")
+
+    Error.print_all()
+
+
+def test2():
+    stream_test = dae_streamer(16, 1)
+    full_test_data = stream_test.test_read_file_as_packets('185_packets', -1,
+                                                           file_path='C:\\GIT\\DetectorDatastreaming\\OOP Edition\\test_data')
+    test_packets = full_test_data[0]  # remove IP address to get raw packet data
+    full_test_packets = []
+    for i in range(1):
+        full_test_packets.extend(test_packets)
+
+    print("Packets read in, packet count: ", len(full_test_packets))
+    print("Perf counter start")
+    timer_s = datetime.datetime.now()
+    event_count = 0
+    for packet in full_test_packets:
+        event_count += stream_test.process_packet_complete(packet)
+    print("Events processed, total events: ", event_count)
+    timer_e = datetime.datetime.now()
+    delta = timer_e - timer_s
+    timer = delta.total_seconds()
+    print("Processing complete, Perf counter stop")
+    print("Task Completed in: ", timer, " Seconds")
+    print("rate: ", event_count / timer, " events/S")
+    print("per event: ", timer / event_count, " S")
+    print("")
+    print("Program Error Check: ")
+
+    Error.print_all()
+
 
 if __name__ == "__main__":
-    starttime = time.time()
-    ADC = PC3544(0)
-    # ADC.set_gain("6B", "0x12345678",WriteType="Write", write_FPGA=False, write_flash=True)
-    for channel in range(24):
-        A_Channel = str(channel) + "A"
-        B_Channel = str(channel) + "B"
-        print(A_Channel + ": " + str(
-            ADC.set_gain(A_Channel, "0xbeef", WriteType="Verify", write_FPGA=True, write_flash=True)) +
-              " " + B_Channel + ": " + str(
-            ADC.set_gain(B_Channel, "0xcafe", WriteType="Verify", write_FPGA=True, write_flash=True)))
-    print("all gain value written, took: ", time.time() - starttime)
-    Error.print_all()
+    # with cProfile.Profile() as pr:
+    # test()
+    test2()
+
+    # stats = pstats.Stats(pr)
+    # stats.sort_stats(pstats.SortKey.TIME)
+    # #stats.print_stats()
+    # stats.dump_stats(filename="dae_streamer.prof")
