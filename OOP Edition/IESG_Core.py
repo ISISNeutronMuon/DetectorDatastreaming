@@ -16,17 +16,17 @@ import os
 import socket  # include socket function for network traffic
 import time
 import matplotlib.pyplot as plt
-
+from confluent_kafka import Producer, Consumer, TopicPartition
+import uuid
+import json
 import pandas as pd  # include pandas for CSV reading and any array functions
 import datetime  # include date time to get date time values as needed.
+from dateutil.tz import tzutc
 from influxdb import InfluxDBClient  # used to log telemetry to the IESG monitoring server
-
-from collections import namedtuple
 import flatbuffers
 import streaming_data_types.fbschemas.eventdata_ev42.EventMessage as EventMessage
 import streaming_data_types.fbschemas.eventdata_ev42.FacilityData as FacilityData
 import streaming_data_types.fbschemas.isis_event_info_is84.ISISData as ISISData
-from streaming_data_types.utils import check_schema_identifier
 import numpy as np
 
 # Define global variables for key info - possibly link from caller?
@@ -418,7 +418,7 @@ class PC3544:
 # Class for DAE Streaming Code. Handles the receiving and processing of UDP data to Kafka.
 class dae_streamer:
     def __init__(self, switchposition=None, fe_fpga=None, stream_ip=None, stream_port=None,
-                 setup_wtable_onstartup=True):
+                 setup_wtable_onstartup=True, instrument=None, kafka_broker=None, influxdb_database=None):
         # try getting the streaming information from the Stream ip and port information
         if stream_ip is not None and stream_port is not None:
             self.ip = stream_ip
@@ -444,6 +444,26 @@ class dae_streamer:
         if setup_wtable_onstartup is True:
             self.setup_wiring_map()
 
+        # setup Kafka object for sending data
+        if instrument is not None:
+            if kafka_broker is not None:
+                self.kafka_object = kafka_helper(kafka_broker=kafka_broker, instrument=instrument)
+            else:
+                self.kafka_object = kafka_helper(kafka_broker="hinata.isis.cclrc.ac.uk:9092", instrument=instrument)
+                Error.AddError(ErrorNumber=22, Severity="NOTICE", printToUser=True,
+                               ErrorDesc="Function Fallback Error - kafka broker address not specified. "
+                                         "Using default broker of: hinata.isis.cclrc.ac.uk:9092")
+        else:
+            Error.AddError(ErrorNumber=22, Severity="NOTICE", printToUser=True,
+                           ErrorDesc=(
+                                       "Function Fallback Error, generation of DAE Streamer "
+                                       "object has no instrument specified. Unable to setup kafka object"))
+            self.kafka_object = None
+
+        # setup influx logging
+        self.influx_logger = InfluxDB_Wrapper(influxdb_database)
+        self.thread_name = None
+
     # sets up network port to be used for streaming
     def setup_network(self):
         self.stream_socket.bind(HostIP, self.port)
@@ -455,35 +475,39 @@ class dae_streamer:
         self.CH_MantidDectID = df_wiring_table_ip['Mantid_DetectorID_Start'].tolist()
         self.CH_MantidDectLen = df_wiring_table_ip['Mantid_Detector_ID_Lenght'].tolist()
 
-    # processes an entire network packet
-    def process_network_packet(self, packet):
-        # test that the packet is valid?
-
-        # define lists for data values
-        raw_frame_data = []
-
-        raw_frame_data = self.process_packet_frame_splitter(packet)
-        processed_header_data = [self.process_fheader(frame) for frame in raw_frame_data]
-        processed_event_data = [self.process_fevents_maps(frame) for frame in raw_frame_data]
-        ev42_event_data = [self.process_ev42() for event in range(len(processed_event_data))]
-
-        return None
+    def stream_loop_to_kafka(self, stop_threads, print_thread_lock, thread_name):
+        self.thread_name = thread_name
+        packet_count = 0
+        while True:
+            if stop_threads is True:
+                print_thread_lock.aquire()
+                print(thread_name, " - STOPPED")
+                break
+            try:
+                if socket.gethostbyname(self.ip):
+                    current_packet, source_address = self.stream_socket.recvfrom(900400)
+                    packet_count += 1
+                    self.process_packet_complete(current_packet)
+            except self.stream_socket.timeout:
+                continue
+        return packet_count
 
     def process_packet_complete(self, packet_data):
         packet_frames = self.process_packet_frame_splitter(packet_data)
         mapped_headers = map(self.process_fheader, packet_frames)
         header_values = list(mapped_headers)
-        total_event = 0
+        total_events = 0
         for frame in range(len(packet_frames)):
             current_frame = packet_frames[frame]
             events = self.process_multiple_fevents_maps(current_frame)
             events_time = [event[1] for event in events]
             detector_ids = [event[0] for event in events]
             frame_ev42 = self.process_ev42(header_values[frame][0], header_values[frame][2], events_time, detector_ids)
-
-            total_event += len(events_time)
-            # send to kafka
-        return total_event
+            if self.kafka_object is not None:
+                self.kafka_object.send_event_flatbuffer(frame_ev42)
+            total_events += len(events_time)
+        self.influx_logger.write_data()
+        return total_events
 
     # splits a given packet into a list of frames
     @staticmethod
@@ -578,7 +602,6 @@ class dae_streamer:
     def process_single_fevent_maps(self, event_data):
         bin_event = bin(int(event_data, base=16))[2:]  # convert hex into binary - remove two char as always 0b
         if event_data[:2] == "e0":  # if has correct marker
-
             event_pulse_height_overflow = bin_event[38:39]
             event_position_overflow = bin_event[39:40]
 
@@ -589,12 +612,16 @@ class dae_streamer:
 
             mantid_pixel = int(event_position / (4096 / self.CH_MantidDectLen[adc_channel])) \
                            + self.CH_MantidDectID[adc_channel]  # Move to mantid tube location
+
+            self.influx_logger.add_event_to_json(self.thread_name, self.ip, self.port, pulse_height=event_pulse_height,
+                                                 mantid_pixel=mantid_pixel, tube_position=event_position)
+
             return event_time_to_frame, mantid_pixel, event_position, event_pulse_height, event_position_overflow, \
-                   event_pulse_height_overflow
+                event_pulse_height_overflow
         else:
             Error.AddError(ErrorNumber=25, Severity="NOTICE", printToUser=True,
                            ErrorDesc=(
-                                       "Event Data Error - Missing e0 flag in data to process - SKIPPING: " + event_data))
+                                       "Event Data Error - Missing e0 flag in event - SKIPPING: " + event_data))
             return None
 
     # processes into ev42 schema
@@ -683,10 +710,6 @@ class dae_streamer:
         test_file.close()
         return packet, source_ip
 
-    # sends ev42 to Kafka broker
-    def kafka_write_ev42(self):
-        return None
-
 
 # Error Handler class - define once on program start to be able to log all errors within the program
 class ErrorHandler:
@@ -766,18 +789,127 @@ class ErrorHandler:
 class InfluxDB_Wrapper:
     def __init__(self, database, time_precision="ms", host="NDAIESGMonitor.isis.cclrc.ac.uk", port=8086):
         self.influx_client = InfluxDBClient(host, port)
-
         self.database = database  # database for the wrapper to use
         self.t_precision = time_precision  # precision of the data
-
         self.json_data = []  # store of data to write to influx
 
     def write_data(self):
-        self.influx_client.write_points(self.json_data, self.database, self.t_precision)
+        print(self.json_data)
+        self.influx_client.write_points(self.json_data, database=self.database, time_precision=self.t_precision)
+        self.json_data = []
+        print("data send")
 
     def add_json(self, json_to_add):
         self.json_data.append(json_to_add)
         return True
+
+    def add_event_to_json(self, thread_instance, stream_address, stream_port, pulse_height=None, mantid_pixel=None,
+                          tube_position=None):
+        to_log = {}
+        if pulse_height is not None:
+            to_log["Pulse Height"] = pulse_height
+        if mantid_pixel is not None:
+            to_log["Mantid Pixel"] = mantid_pixel
+        if tube_position is not None:
+            to_log["Tube Position"] = tube_position
+
+        if len(to_log) != 0:
+            self.json_data.append(
+                {
+                    "measurement": "Python_Streamer",
+                    "tags": {
+                        "thread": thread_instance,
+                        "MADC_IP_Address": stream_address,
+                        "MADC_Port": stream_port
+                    },
+                    "time": str(datetime.datetime.utcnow()),
+                    "fields": to_log
+                }
+            )
+        else:
+            Error.AddError(ErrorNumber=22, Severity="ERROR", printToUser=False,
+                           ErrorDesc="Function Fallback Error - No value was passed to influx logger to log.")
+
+
+
+    def add_frame_to_json(self, event_count, vetos, ):
+        pass
+
+    def add_packet_to_json(self):
+        pass
+
+
+# code to deal with writing and reading data from a given Kafka broker
+class kafka_helper():
+    def __init__(self, kafka_broker, instrument, event_topic="_events", run_info_topic="_runInfo",
+                 monitors_topic="_monitorHistograms", sample_env_topic="_sampleEnv"):
+
+        self.server = kafka_broker
+        self.producer = Producer({"bootstrap.servers": self.server})
+        # build string for each topic name
+        self.topic_event = instrument + event_topic
+        self.topic_run_info = instrument + run_info_topic
+        self.topic_monitors = instrument + monitors_topic
+        self.topic_sample_environment = instrument + sample_env_topic
+
+    def send_event_flatbuffer(self, ev42_data):
+        self.producer.produce(self.topic_event, ev42_data)
+        self.producer.flush()
+
+    def send_start_stop_flatbuffer(self, run_control_message):
+        self.producer.produce(self.topic_event, run_control_message)
+        self.producer.flush()
+
+    def get_event_data_range(self, start_time, end_time):
+        """
+        Get the data between the two given times.
+        Note that this is based on the timestamp of when the data was put into kafka.
+        Args:
+            start_time: The beginning of where you want the data from
+            end_time: The end of where you want the data to
+            instrument: The instrument to get the data from
+        """
+        consumer = self._create_consumer()
+
+        epoch = datetime.fromtimestamp(0, tzutc())
+
+        start_time = start_time.astimezone(tzutc())
+        end_time = end_time.astimezone(tzutc())
+
+        def get_part_offset(dt):
+            time_since_epoch = int((dt - epoch).total_seconds() * 1000)
+            return consumer.offsets_for_times([TopicPartition(self.topic_event), 0, time_since_epoch])[0]
+        try:
+            start_time_part_offset = get_part_offset(start_time)
+            end_time_part_offset = get_part_offset(end_time)
+        except Exception:
+            # Sometimes the consumer isn't quite ready, try once more
+            start_time_part_offset = get_part_offset(start_time)
+            end_time_part_offset = get_part_offset(end_time)
+
+        offsets = [start_time_part_offset.offset, end_time_part_offset.offset]
+
+        if offsets[0] == -1:
+            print("No data found for time period")
+            return
+
+        consumer.assign([start_time_part_offset])
+
+        if offsets[1] == -1:
+            offsets[1] = consumer.get_watermark_offsets(end_time_part_offset)[1]
+
+        number_to_consume = offsets[1] - offsets[0]
+
+        return [json.loads(str(data.value(), encoding="utf-8"))
+                for data in consumer.consume(number_to_consume)]
+
+    def _create_consumer(self):
+        consumer = Consumer(
+            {
+                "bootstrap.servers": self.server,
+                "group.id": uuid.uuid4(),
+            })
+        return consumer
 
 
 Error = ErrorHandler()  # create error handler object to hold all errors within
@@ -840,9 +972,11 @@ def test():
 
 
 def test2():
-    stream_test = dae_streamer(16, 1)
-    full_test_data = stream_test.test_read_file_as_packets('185_packets', -1,
-                                                           file_path='C:\\GIT\\DetectorDatastreaming\\OOP Edition\\test_data')
+    # do not specify instrument to not log to kafka
+    stream_test = dae_streamer(switchposition=16, fe_fpga=1,
+                               kafka_broker="livedata.isis.cclrc.ac.uk", influxdb_database="python_testing")
+    full_test_data = stream_test.test_read_file_as_packets('184_packets', -1,
+                                                           file_path='C:\\GIT\\DetectorDatastreaming_development\\OOP Edition\\test_data')
     test_packets = full_test_data[0]  # remove IP address to get raw packet data
     full_test_packets = []
     for i in range(1):
@@ -872,8 +1006,4 @@ if __name__ == "__main__":
     # with cProfile.Profile() as pr:
     # test()
     test2()
-
-    # stats = pstats.Stats(pr)
-    # stats.sort_stats(pstats.SortKey.TIME)
-    # #stats.print_stats()
-    # stats.dump_stats(filename="dae_streamer.prof")
+    Error.print_all()
