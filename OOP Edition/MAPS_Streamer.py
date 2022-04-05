@@ -38,25 +38,25 @@ if __name__ == "__main__":
     print("Data Streaming IPs in use:", StreamingIPs)
     print("No. Streaming ADC's:", len(ADCName))
     print("No. Streaming Ports:", len(StreamingPorts))
+    print("No. Streaming IPs:", len(StreamingIPs))
 
     PACKET_COUNT = []
     for i in range(len(StreamingPorts)):
         PACKET_COUNT.append("0")
+
     lock = threading.Lock()
 
-
-    streaming_object =[]
+    streaming_object = []
 
     # creating streaming threads
     for i in range(len(StreamingPorts)):
         print("Thread Create, PORT:", StreamingPorts[i], " IP:", StreamingIPs[i])
-        streaming_object[i] = IESG_Core.dae_streamer(stream_ip=StreamingIPs[i], stream_port=StreamingPorts[i],
-                                                     kafka_broker="livedata.isis.cclrc.ac.uk",
-                                                     influxdb_database="python_testing")
-
-        thread_name = "Kafka Stream Handler Thread " + i + "-"+ StreamingIPs[i]
-        processing_thread = threading.Thread(target=streaming_object[i].stream_loop_to_kafka(),
-                                             args=((lambda: stop_threads), lock, thread_name))
+        streaming_object.append(IESG_Core.dae_streamer(stream_ip=StreamingIPs[i], stream_port=StreamingPorts[i],
+                                                     kafka_broker="livedata.isis.cclrc.ac.uk", instrument="MAPSTEST2"
+                                                     influxdb_database="python_testing"))
+    for i in range(len(StreamingPorts)):
+        thread_name = "Kafka Stream Handler Thread " + str(i) + "-" + str(StreamingIPs[i])
+        processing_thread = threading.Thread(target=streaming_object[i].stream_loop_to_kafka, args=((lambda: stop_threads),lock, thread_name))
         processing_thread.start()
 
     input(
@@ -66,3 +66,4 @@ if __name__ == "__main__":
         if processing_thread.is_alive() == False:
             print("Threads Closed")
             break
+

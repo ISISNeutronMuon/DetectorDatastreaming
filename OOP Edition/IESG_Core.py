@@ -437,6 +437,7 @@ class dae_streamer:
             self.port = (fe_fpga_port_offset[fe_fpga] + (self.switch_pos * 4))  # Calc stream Port
 
         self.stream_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)  # create a network socket
+        self.setup_network()
 
         # setup variables for ADC wiring configuration
         self.CH_MantidDectID = None
@@ -466,7 +467,7 @@ class dae_streamer:
 
     # sets up network port to be used for streaming
     def setup_network(self):
-        self.stream_socket.bind(HostIP, self.port)
+        self.stream_socket.bind((HostIP, int(self.port)))
         self.stream_socket.settimeout(2)
 
     def setup_wiring_map(self, wiring_table='DAES_WiringTable_MAPs.csv'):
@@ -482,15 +483,18 @@ class dae_streamer:
             if stop_threads is True:
                 print_thread_lock.aquire()
                 print(thread_name, " - STOPPED")
+                print_thread_lock.release()
                 break
             try:
                 if socket.gethostbyname(self.ip):
                     current_packet, source_address = self.stream_socket.recvfrom(900400)
                     packet_count += 1
-                    self.process_packet_complete(current_packet)
-            except self.stream_socket.timeout:
+                    self.process_packet_complete(current_packet.hex())
+            except socket.timeout:
+                if stop_threads():
+                    break
                 continue
-        return packet_count
+        #return packet_count
 
     def process_packet_complete(self, packet_data):
         packet_frames = self.process_packet_frame_splitter(packet_data)
@@ -794,10 +798,8 @@ class InfluxDB_Wrapper:
         self.json_data = []  # store of data to write to influx
 
     def write_data(self):
-        print(self.json_data)
         self.influx_client.write_points(self.json_data, database=self.database, time_precision=self.t_precision)
         self.json_data = []
-        print("data send")
 
     def add_json(self, json_to_add):
         self.json_data.append(json_to_add)
