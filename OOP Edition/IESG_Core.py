@@ -542,9 +542,13 @@ class dae_streamer:
         frame_header = frame_data[0:128]  # extract header from frame data
         binary_header = bin(int(frame_header, base=16))[2:]  # convert to bin - remove bin identifier
 
+        epoch = datetime.date(1970, 1, 1)
+        current_date = datetime.date(int(binary_header[128:136], 2)+2000, 1, 1)
+        delta_time = current_date - epoch
+        days_since_epoch = delta_time.days + int(binary_header[136:145], 2) - 1
+
         # calculate time of frame event in nS - since EPOCH
-        frame_time = int((((365 * 8.64e+13) * int(binary_header[128:136], 2) + 30) +
-                      (int(binary_header[136:145], 2) * 8.64e+13) + (int(binary_header[145:150], 2) * 3.6e+12) +
+        frame_time = int(((days_since_epoch * 8.64e+13) + (int(binary_header[145:150], 2) * 3.6e+12) +
                       (int(binary_header[150:156], 2) * 6e+10) + (int(binary_header[156:162], 2) * 1e+9) +
                       (int(binary_header[162:172], 2) * 1000000) + (int(binary_header[172:182], 2) * 1000) +
                       int(binary_header[182:192], 2)))
@@ -798,8 +802,10 @@ class InfluxDB_Wrapper:
         self.json_data = []  # store of data to write to influx
 
     def write_data(self):
+
         self.influx_client.write_points(self.json_data, database=self.database, time_precision=self.t_precision)
         self.json_data = []
+         #   except exceptions InfluxDBClientError as err:
 
     def add_json(self, json_to_add):
         self.json_data.append(json_to_add)

@@ -52,7 +52,7 @@ if __name__ == "__main__":
     for i in range(len(StreamingPorts)):
         print("Thread Create, PORT:", StreamingPorts[i], " IP:", StreamingIPs[i])
         streaming_object.append(IESG_Core.dae_streamer(stream_ip=StreamingIPs[i], stream_port=StreamingPorts[i],
-                                                     kafka_broker="livedata.isis.cclrc.ac.uk", instrument="MAPSTEST2"
+                                                     kafka_broker="livedata.isis.cclrc.ac.uk", instrument="MAPSTEST2",
                                                      influxdb_database="python_testing"))
     for i in range(len(StreamingPorts)):
         thread_name = "Kafka Stream Handler Thread " + str(i) + "-" + str(StreamingIPs[i])
