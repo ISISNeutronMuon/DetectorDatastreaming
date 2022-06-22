@@ -28,6 +28,7 @@ import streaming_data_types.fbschemas.eventdata_ev42.EventMessage as EventMessag
 import streaming_data_types.fbschemas.eventdata_ev42.FacilityData as FacilityData
 import streaming_data_types.fbschemas.isis_event_info_is84.ISISData as ISISData
 import numpy as np
+import requests.exceptions
 
 # Define global variables for key info - possibly link from caller?
 HostIP = "192.168.1.125"
@@ -501,16 +502,18 @@ class dae_streamer:
         mapped_headers = map(self.process_fheader, packet_frames)
         header_values = list(mapped_headers)
         total_events = 0
-        for frame in range(len(packet_frames)):
-            current_frame = packet_frames[frame]
-            events = self.process_multiple_fevents_maps(current_frame)
-            events_time = [event[1] for event in events]
-            detector_ids = [event[0] for event in events]
-            frame_ev42 = self.process_ev42(header_values[frame][0], header_values[frame][2], events_time, detector_ids)
-            if self.kafka_object is not None:
-                self.kafka_object.send_event_flatbuffer(frame_ev42)
-            total_events += len(events_time)
-        self.influx_logger.write_data()
+
+        if len(packet_frames) is not None:
+            for frame in range(len(packet_frames)):
+                current_frame = packet_frames[frame]
+                events = self.process_multiple_fevents_maps(current_frame)
+                events_time = [event[0] for event in events]
+                detector_ids = [event[1] for event in events]
+                frame_ev42 = self.process_ev42(header_values[frame][0], header_values[frame][2], events_time, detector_ids)
+                if self.kafka_object is not None:
+                    self.kafka_object.send_event_flatbuffer(frame_ev42)
+                total_events += len(events_time)
+            self.influx_logger.write_data()
         return total_events
 
     # splits a given packet into a list of frames
@@ -546,6 +549,8 @@ class dae_streamer:
         current_date = datetime.date(int(binary_header[128:136], 2)+2000, 1, 1)
         delta_time = current_date - epoch
         days_since_epoch = delta_time.days + int(binary_header[136:145], 2) - 1
+
+       # print(str(int(binary_header[128:136], 2)+2000))
 
         # calculate time of frame event in nS - since EPOCH
         frame_time = int(((days_since_epoch * 8.64e+13) + (int(binary_header[145:150], 2) * 3.6e+12) +
@@ -618,8 +623,8 @@ class dae_streamer:
             event_pulse_height = int(bin_event[40:52], 2)  # convert binary pulse height of the event into an int
             adc_channel = int(bin_event[36:38], 2)  # convert binary channel of the event into an int
 
-            mantid_pixel = int(event_position / (4096 / self.CH_MantidDectLen[adc_channel])) \
-                           + self.CH_MantidDectID[adc_channel]  # Move to mantid tube location
+            mantid_pixel = int(event_position / (4096 / self.CH_MantidDectLen[adc_channel]))
+            mantid_pixel += self.CH_MantidDectID[adc_channel]  # Move to mantid tube location
 
             self.influx_logger.add_event_to_json(self.thread_name, self.ip, self.port, pulse_height=event_pulse_height,
                                                  mantid_pixel=mantid_pixel, tube_position=event_position)
@@ -802,10 +807,15 @@ class InfluxDB_Wrapper:
         self.json_data = []  # store of data to write to influx
 
     def write_data(self):
-
-        self.influx_client.write_points(self.json_data, database=self.database, time_precision=self.t_precision)
+        try:
+            self.influx_client.write_points(self.json_data, database=self.database, time_precision=self.t_precision)
+        except Exception as e:
+            Error.AddError(ErrorNumber=25, Severity="NOTICE", printToUser=True,
+                           ErrorDesc=f"Influx Data Write Exception - Unable to write data to the influxDB, "
+                                     "make sure the server is up and provided values are correct. Reason:  {e}")
+            raise e
         self.json_data = []
-         #   except exceptions InfluxDBClientError as err:
+
 
     def add_json(self, json_to_add):
         self.json_data.append(json_to_add)

@@ -54,16 +54,19 @@ if __name__ == "__main__":
         streaming_object.append(IESG_Core.dae_streamer(stream_ip=StreamingIPs[i], stream_port=StreamingPorts[i],
                                                      kafka_broker="livedata.isis.cclrc.ac.uk", instrument="MAPSTEST2",
                                                      influxdb_database="python_testing"))
+    threads = []
     for i in range(len(StreamingPorts)):
         thread_name = "Kafka Stream Handler Thread " + str(i) + "-" + str(StreamingIPs[i])
         processing_thread = threading.Thread(target=streaming_object[i].stream_loop_to_kafka, args=((lambda: stop_threads),lock, thread_name))
+        threads.append(processing_thread)
         processing_thread.start()
 
     input(
         "Streams Started, press enter to stop streaming threads" + "\n")  # this makes the precess wait for enter press.
     stop_threads = True
+    print("thread stop command given, waiting for all threads to close")
     while True:
-        if processing_thread.is_alive() == False:
-            print("Threads Closed")
-            break
-
+        for thread in threads:
+            if thread.is_alive() == False:
+                break
+    print("Threads Closed")
