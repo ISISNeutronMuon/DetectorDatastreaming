@@ -539,6 +539,9 @@ class dae_streamer:
     # processes the header of a frame
     @staticmethod
     def process_fheader(frame_data):
+
+        epoch = datetime.date(1970, 1, 1)
+
         frame_header = frame_data[0:128]  # extract header from frame data
         binary_header = bin(int(frame_header, base=16))[2:]  # convert to bin - remove bin identifier
 
@@ -548,10 +551,20 @@ class dae_streamer:
         days_since_epoch = delta_time.days + int(binary_header[136:145], 2) - 1
 
         # calculate time of frame event in nS - since EPOCH
+<<<<<<< Updated upstream
         frame_time = int(((days_since_epoch * 8.64e+13) + (int(binary_header[145:150], 2) * 3.6e+12) +
+=======
+        frame_time = int((((365.25 * 8.64e+13) * int(binary_header[128:136], 2) + 30) +
+                      (int(binary_header[136:145], 2) * 8.64e+13) + (int(binary_header[145:150], 2) * 3.6e+12) +
+>>>>>>> Stashed changes
                       (int(binary_header[150:156], 2) * 6e+10) + (int(binary_header[156:162], 2) * 1e+9) +
                       (int(binary_header[162:172], 2) * 1000000) + (int(binary_header[172:182], 2) * 1000) +
                       int(binary_header[182:192], 2)))
+
+        current_date = datetime.date(int(binary_header[128:136], 2), 1, 1) + int(binary_header[136:145], 2)
+        days_since_epoch = current_date-epoch
+
+        print(days_since_epoch.days)
 
         period_number = int(binary_header[208:224], 2)
         period_sequence = int(binary_header[192:207], 2)

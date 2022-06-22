@@ -18,8 +18,8 @@ from datetime import datetime
 from dateutil.tz import tzutc
 import uuid
 
-SERVER = "itachi.isis.cclrc.ac.uk:9092"
-TOPIC = "MAPSTEST_events"
+SERVER = "livedata.isis.cclrc.ac.uk"
+TOPIC = "MAPSTEST2_events"
 producer = Producer({"bootstrap.servers": SERVER})
 
 def send_flatBuffer(data):

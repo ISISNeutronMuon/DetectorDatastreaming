@@ -13,10 +13,10 @@ RunInfo = {
     "run_name": "test_run",
     "nexus_structure": "{}",
     "service_id": "IESGPythonTesting",
-    "instrument_name": "MAPS",
-    "broker": "itachi.isis.cclrc.ac.uk:9092",
+    "instrument_name": "MAP",
+    "broker": "livedata.isis.cclrc.ac.uk:9092",
   #  "metadata": None,
-    "control_topic": "MAPSTEST_runInfo",
+    "control_topic": "MAPSTEST2_runInfo",
 }
 
 # Serialise and send set to kafka:

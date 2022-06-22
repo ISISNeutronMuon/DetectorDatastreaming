@@ -15,8 +15,8 @@
 # http://opensource.org/licenses/eclipse-1.0.php
 from confluent_kafka import Producer
 
-SERVER = "itachi.isis.cclrc.ac.uk:9092"
-TOPIC = "MAPSTEST_runInfo"
+SERVER = "livedata.isis.cclrc.ac.uk:9092"
+TOPIC = "MAPSTEST2_runInfo"
 producer = Producer({"bootstrap.servers": SERVER})
 
 def send_flatBuffer(data):
