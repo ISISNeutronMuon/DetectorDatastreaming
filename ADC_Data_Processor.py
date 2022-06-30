@@ -119,6 +119,8 @@ def PacketProcessor_MAPS(Packet_Data, SRC_IP):  # Pulls the event data out of th
     numprocessedevents = 0
     numerror = 0
 
+    tubepos = []
+
     Frame_Posisitions = []
     Frame_PulHs = []
     Frame_PosOverFlows =[]
@@ -155,6 +157,7 @@ def PacketProcessor_MAPS(Packet_Data, SRC_IP):  # Pulls the event data out of th
             Frame_PulHs.append(intPulH)
             Frame_PosOverFlows.append(PosOverflow)
             Frame_PulHOverFlows.append(PulHOverflow)
+            tubepos.append(scaledpos)
 
             numprocessedevents += 1
         else:
@@ -162,7 +165,8 @@ def PacketProcessor_MAPS(Packet_Data, SRC_IP):  # Pulls the event data out of th
             print("INVALID EVENT DETECTED, Bad Event: ", Packet_Data[EventStartADD:EventEndADD], " Error SRC IP: ", SRC_IP)
             print("Packet Data: ", Packet_Data)
 
-    return Frame_Times, Frame_Posisitions, Frame_PulHs, Frame_PulHOverFlows, Frame_PosOverFlows, numerror, numprocessedevents
+    return Frame_Times, Frame_Posisitions, Frame_PulHs, Frame_PulHOverFlows, Frame_PosOverFlows, numerror, \
+        numprocessedevents, tubepos
 
 def WiringTableReader(CSV_File_Location):  # Reads in the CSV containing wiring table information
     WiringTablePD = pd.read_csv(CSV_File_Location)

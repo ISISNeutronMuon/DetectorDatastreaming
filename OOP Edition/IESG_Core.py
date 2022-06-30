@@ -509,9 +509,10 @@ class dae_streamer:
                 events = self.process_multiple_fevents_maps(current_frame)
                 events_time = [event[0] for event in events]
                 detector_ids = [event[1] for event in events]
-                frame_ev42 = self.process_ev42(header_values[frame][0], header_values[frame][2], events_time, detector_ids)
-                if self.kafka_object is not None:
-                    self.kafka_object.send_event_flatbuffer(frame_ev42)
+                if len(detector_ids) > 0:
+                    frame_ev42 = self.process_ev42(header_values[frame][0], header_values[frame][2], events_time, detector_ids)
+                    if self.kafka_object is not None:
+                        self.kafka_object.send_event_flatbuffer(frame_ev42)
                 total_events += len(events_time)
             self.influx_logger.write_data()
         return total_events
@@ -556,20 +557,11 @@ class dae_streamer:
        # print(str(int(binary_header[128:136], 2)+2000))
 
         # calculate time of frame event in nS - since EPOCH
-<<<<<<< Updated upstream
+
         frame_time = int(((days_since_epoch * 8.64e+13) + (int(binary_header[145:150], 2) * 3.6e+12) +
-=======
-        frame_time = int((((365.25 * 8.64e+13) * int(binary_header[128:136], 2) + 30) +
-                      (int(binary_header[136:145], 2) * 8.64e+13) + (int(binary_header[145:150], 2) * 3.6e+12) +
->>>>>>> Stashed changes
                       (int(binary_header[150:156], 2) * 6e+10) + (int(binary_header[156:162], 2) * 1e+9) +
                       (int(binary_header[162:172], 2) * 1000000) + (int(binary_header[172:182], 2) * 1000) +
                       int(binary_header[182:192], 2)))
-
-        current_date = datetime.date(int(binary_header[128:136], 2), 1, 1) + int(binary_header[136:145], 2)
-        days_since_epoch = current_date-epoch
-
-        print(days_since_epoch.days)
 
         period_number = int(binary_header[208:224], 2)
         period_sequence = int(binary_header[192:207], 2)
@@ -634,13 +626,14 @@ class dae_streamer:
             event_time_to_frame = int(bin_event[8:32], 2)  # convert binary frame time of event into an int
             event_position = int(bin_event[52:64], 2)  # convert binary position of the event into an int
             event_pulse_height = int(bin_event[40:52], 2)  # convert binary pulse height of the event into an int
-            adc_channel = int(bin_event[36:38], 2)  # convert binary channel of the event into an int
+            adc_channel = int(bin_event[35:38], 2)  # convert binary channel of the event into an int
 
             mantid_pixel = int(event_position / (4096 / self.CH_MantidDectLen[adc_channel]))
             mantid_pixel += self.CH_MantidDectID[adc_channel]  # Move to mantid tube location
 
             self.influx_logger.add_event_to_json(self.thread_name, self.ip, self.port, pulse_height=event_pulse_height,
-                                                 mantid_pixel=mantid_pixel, tube_position=event_position)
+                                                 mantid_pixel=mantid_pixel, tube_position=event_position,
+                                                 ADC_Channel=adc_channel)
 
             return event_time_to_frame, mantid_pixel, event_position, event_pulse_height, event_position_overflow, \
                 event_pulse_height_overflow
@@ -835,7 +828,7 @@ class InfluxDB_Wrapper:
         return True
 
     def add_event_to_json(self, thread_instance, stream_address, stream_port, pulse_height=None, mantid_pixel=None,
-                          tube_position=None):
+                          tube_position=None, ADC_Channel=None):
         to_log = {}
         if pulse_height is not None:
             to_log["Pulse Height"] = pulse_height
@@ -843,6 +836,8 @@ class InfluxDB_Wrapper:
             to_log["Mantid Pixel"] = mantid_pixel
         if tube_position is not None:
             to_log["Tube Position"] = tube_position
+        if ADC_Channel is not None:
+            to_log["ADC Channel"] = ADC_Channel
 
         if len(to_log) != 0:
             self.json_data.append(

@@ -203,7 +203,7 @@ def MultipleStreamToProcessedEV42(stop, PACKET_COUNT,instance, Stream_Port, Stre
                     # push the data into ESS Flatbuffer format
                     EV42_FrameData = ADC_Data_Processor.Serialise_EV42(Stream_IP, HeaderData[0], HeaderData[2], result[0],
                                                         result[1])
-                    Send_Kafka_Event.send_flatBuffer(EV42_FrameData)
+                    # Send_Kafka_Event.send_flatBuffer(EV42_FrameData)
                     totalnumerror += result[5]  # get packet processor number of errors
                     totalnumprocessedevents += int(result[6])  # get packet processor number of events
                     numevents_fromheader += HeaderData[1]
@@ -211,8 +211,9 @@ def MultipleStreamToProcessedEV42(stop, PACKET_COUNT,instance, Stream_Port, Stre
                     packet_event_errors += result[5]
 
                     PulH = result[2]
+                    position = result[7]
 
-                    for i in range(result[6]):
+                    for i in range(len(PulH)):
                         Influx_json_body.append(
                             {
                                 "measurement": "Python_Streamer",
@@ -224,7 +225,7 @@ def MultipleStreamToProcessedEV42(stop, PACKET_COUNT,instance, Stream_Port, Stre
                                 "time": str(datetime.datetime.utcnow()),
                                 "fields": {
                                     "Pulse_Height": PulH[i],
-                                    "DectID": result[1][i]
+                                    "Tube Position": position[i]
                                 }
                             }
                         )
