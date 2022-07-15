@@ -4,9 +4,9 @@ from streaming_data_types.eventdata_ev42 import deserialise_ev42 # import ESS Fl
 import matplotlib.pyplot as plt
 import pandas as pd
 
-mins = 45
+mins = 1
 print_terminal = True
-plot = True
+plot = False
 df_spectrum_map = pd.read_csv('MAPS_SPEC_MAP.csv')
 df_spectrum_map.Detector_id = df_spectrum_map.Detector_id.astype(int)
 df_spectrum_map.Spectrum = df_spectrum_map.Spectrum.astype(int)

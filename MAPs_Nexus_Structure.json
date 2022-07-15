@@ -1,0 +1,94 @@
+{
+  "children": [
+    {
+      "type": "group",
+      "name": "raw_data_1",
+      "children": [
+        {
+          "type": "group",
+          "name": "events",
+          "children": [
+            {
+              "type": "stream",
+              "stream": {
+                "topic": "MAPSTEST2_events",
+                "source": "DAE_Streamed",
+                "writer_module": "ev42"
+              }
+            }
+          ],
+          "attributes": [
+            {
+              "name": "NX_class",
+              "values": "NXevent_data"
+            }
+          ]
+        },
+        {
+          "type": "group",
+          "name": "instrument",
+          "children": [
+            {
+              "type": "dataset",
+              "name": "name",
+              "dataset": {
+                "type": "string"
+              },
+              "values": "MAP",
+              "attributes": [
+                {
+                  "name": "short_name",
+                  "values": "MAP"
+                },
+                                {
+                  "name": "long_name",
+                  "values": "MAPS"
+                }
+              ]
+            }
+          ],
+          "attributes": [
+            {
+              "name": "NX_class",
+              "values": "NXinstrument"
+            }
+          ]
+        },
+        {
+          "type": "dataset",
+          "name": "start_time",
+          "dataset": {
+            "type": "string"
+          },
+          "values": "2022-07-13T02:58:52",
+          "attributes": [
+            {
+              "name": "units",
+              "values": "ISO8601"
+            }
+          ]
+        },
+        {
+          "type": "dataset",
+          "name": "end_time",
+          "dataset": {
+            "type": "string"
+          },
+          "values": "2022-07-13T03:58:52",
+          "attributes": [
+            {
+              "name": "units",
+              "values": "ISO8601"
+            }
+          ]
+        }
+      ],
+      "attributes": [
+        {
+          "name": "NX_class",
+          "values": "NXentry"
+        }
+      ]
+    }
+  ]
+}
