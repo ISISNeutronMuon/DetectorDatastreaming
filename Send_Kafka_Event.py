@@ -20,6 +20,7 @@ import uuid
 
 SERVER = "livedata.isis.cclrc.ac.uk"
 TOPIC = "MAPSTEST2_events"
+#TOPIC = "Mantid_Debug_events"
 producer = Producer({"bootstrap.servers": SERVER})
 
 def send_flatBuffer(data):

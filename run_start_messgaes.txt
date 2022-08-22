@@ -1,0 +1,195 @@
+Run Start - 0
+nexus structure: 
+{
+	"children": [
+	{
+		"type": "group",
+			"name" : "entry",
+			"children" : [
+		{
+			"type": "group",
+				"name" : "events",
+				"children" : [
+			{
+				"type": "stream",
+					"stream" : {
+					"topic": "MAPS_events",
+						"source" : "ISISICP",
+						"writer_module" : "ev42"
+				}
+			}
+				]
+		}
+			],
+			"attributes": [
+			{
+				"name": "NX_class",
+					"values" : "NXentry"
+			}
+			]
+	}
+	]
+}
+
+Spec map: DetectorSpectrumMap(spectrum_numbers=array([36865, 36866, 36867, ..., 35840, 35840, 35840]), detector_ids=array([ 1000001,  1000002,  1000003, ..., 44608510, 44608511, 44608512]), n_spectra=294916)
+
+Run Start - 1
+nexus structure: 
+{
+	"children": [
+	{
+		"type": "group",
+			"name" : "entry",
+			"children" : [
+		{
+			"type": "group",
+				"name" : "events",
+				"children" : [
+			{
+				"type": "stream",
+					"stream" : {
+					"topic": "MAPS_events",
+						"source" : "ISISICP",
+						"writer_module" : "ev42"
+				}
+			}
+				]
+		}
+			],
+			"attributes": [
+			{
+				"name": "NX_class",
+					"values" : "NXentry"
+			}
+			]
+	}
+	]
+}
+
+Spec map: DetectorSpectrumMap(spectrum_numbers=array([36865, 36866, 36867, ..., 35840, 35840, 35840]), detector_ids=array([ 1000001,  1000002,  1000003, ..., 44608510, 44608511, 44608512]), n_spectra=294916)
+
+Run Start - 2
+nexus structure: 
+{
+	"children": [
+	{
+		"type": "group",
+			"name" : "entry",
+			"children" : [
+		{
+			"type": "group",
+				"name" : "events",
+				"children" : [
+			{
+				"type": "stream",
+					"stream" : {
+					"topic": "MAPS_events",
+						"source" : "ISISICP",
+						"writer_module" : "ev42"
+				}
+			}
+				]
+		}
+			],
+			"attributes": [
+			{
+				"name": "NX_class",
+					"values" : "NXentry"
+			}
+			]
+	}
+	]
+}
+
+Spec map: DetectorSpectrumMap(spectrum_numbers=array([36865, 36866, 36867, ..., 35840, 35840, 35840]), detector_ids=array([ 1000001,  1000002,  1000003, ..., 44608510, 44608511, 44608512]), n_spectra=294916)
+
+Run Start - 3
+nexus structure: 
+{
+    "children": [
+        {
+            "type": "group",
+            "name": "entry",
+            "children": [
+                {
+                    "type": "group",
+                    "name": "events",
+                    "children": [
+                        {
+                            "type": "stream",
+                            "stream": {
+                                "topic": "MAPSTEST2_events",
+                                "source": "DAE_Streamed",
+                                "writer_module": "ev42"
+                            }
+                        }
+                    ],
+                    "attributes": [
+                        {
+                            "name": "NX_class",
+                            "values": "NXevent_data"
+                        }
+                    ]
+                }
+            ],
+            "attributes": [
+                {
+                    "name": "NX_class",
+                    "values": "NXentry"
+                }
+            ]
+        },
+        {
+            "type": "group",
+            "name": "instrument",
+            "children": [
+                {
+                    "type": "dataset",
+                    "name": "name",
+                    "dataset": {
+                        "type": "string"
+                    },
+                    "values": "MAPS"
+                }
+            ]
+        }
+    ]
+}
+
+Spec map: None
+
+Run Start - 4
+nexus structure: 
+{
+	"children": [
+	{
+		"type": "group",
+			"name" : "entry",
+			"children" : [
+		{
+			"type": "group",
+				"name" : "events",
+				"children" : [
+			{
+				"type": "stream",
+					"stream" : {
+					"topic": "MAPS_events",
+						"source" : "ISISICP",
+						"writer_module" : "ev42"
+				}
+			}
+				]
+		}
+			],
+			"attributes": [
+			{
+				"name": "NX_class",
+					"values" : "NXentry"
+			}
+			]
+	}
+	]
+}
+
+Spec map: DetectorSpectrumMap(spectrum_numbers=array([36865, 36866, 36867, ..., 35840, 35840, 35840]), detector_ids=array([ 1000001,  1000002,  1000003, ..., 44608510, 44608511, 44608512]), n_spectra=294916)
+
