@@ -465,6 +465,7 @@ class dae_streamer:
         # setup influx logging
         self.influx_logger = InfluxDB_Wrapper(influxdb_database)
         self.thread_name = None
+        self.kafka_debug_influx = InfluxDB_Wrapper("event_kafka_debug")
 
     # sets up network port to be used for streaming
     def setup_network(self):
@@ -480,8 +481,10 @@ class dae_streamer:
     def stream_loop_to_kafka(self, stop_threads, print_thread_lock, thread_name):
         self.thread_name = thread_name
         packet_count = 0
+        self.kafka_debug_influx.log_packet_event_count(self.thread_name, self.ip, packet_count=packet_count)
         while True:
             if stop_threads is True:
+                print("awaiting lock")
                 print_thread_lock.aquire()
                 print(thread_name, " - STOPPED")
                 print_thread_lock.release()
@@ -490,9 +493,10 @@ class dae_streamer:
                 if socket.gethostbyname(self.ip):
                     current_packet, source_address = self.stream_socket.recvfrom(900400)
                     packet_count += 1
-                    self.process_packet_complete(current_packet.hex())
+                    self.kafka_debug_influx.log_packet_event_count(self.thread_name, self.ip, packet_count=packet_count, event_count=self.process_packet_complete(current_packet.hex()))
             except socket.timeout:
-                if stop_threads():
+                self.kafka_debug_influx.log_packet_event_count(self.thread_name, self.ip, packet_count=packet_count)
+                if stop_threads is True:
                     break
                 continue
         #return packet_count
@@ -503,17 +507,18 @@ class dae_streamer:
         header_values = list(mapped_headers)
         total_events = 0
 
-        if len(packet_frames) is not None:
+        if len(packet_frames) != 0:
             for frame in range(len(packet_frames)):
                 current_frame = packet_frames[frame]
                 events = self.process_multiple_fevents_maps(current_frame)
-                events_time = [event[0] for event in events]
-                detector_ids = [event[1] for event in events]
-                if len(detector_ids) > 0:
-                    frame_ev42 = self.process_ev42(header_values[frame][0], header_values[frame][2], events_time, detector_ids)
-                    if self.kafka_object is not None:
-                        self.kafka_object.send_event_flatbuffer(frame_ev42)
-                total_events += len(events_time)
+                if events is not None:
+                    events_time = [event[0] for event in events]
+                    detector_ids = [event[1] for event in events]
+                    if len(detector_ids) > 0:
+                        frame_ev42 = self.process_ev42(header_values[frame][0], header_values[frame][2], events_time, detector_ids)
+                        if self.kafka_object is not None:
+                            self.kafka_object.send_event_flatbuffer(frame_ev42)
+                    total_events += len(events_time)
             self.influx_logger.write_data()
         return total_events
 
@@ -558,7 +563,7 @@ class dae_streamer:
 
         # calculate time of frame event in nS - since EPOCH
 
-        frame_time = int(((days_since_epoch * 8.64e+13) + (int(binary_header[145:150], 2) * 3.6e+12) +
+        frame_time = int(((days_since_epoch * 8.64e+13) + ((int(binary_header[145:150], 2)-1) * 3.6e+12) +
                       (int(binary_header[150:156], 2) * 6e+10) + (int(binary_header[156:162], 2) * 1e+9) +
                       (int(binary_header[162:172], 2) * 1000000) + (int(binary_header[172:182], 2) * 1000) +
                       int(binary_header[182:192], 2)))
@@ -599,7 +604,7 @@ class dae_streamer:
         event_data_len = len(event_data) - event_data.count('\n')
 
         if event_data_len % 16 != 0:  # if event data is complete - each event is 16 char, -1 for ending \n char
-            Error.AddError(ErrorNumber=22, Severity="ERROR", printToUser=False,
+            Error.AddError(ErrorNumber=22, Severity="ERROR", printToUser=True,
                            ErrorDesc="Event Data Error - event data not divisible by 16, suspected incomplete"
                                      " or other frame issue. event data len: " + str(event_data_len))
             return None
@@ -614,6 +619,8 @@ class dae_streamer:
             event_start = event_i * 16
             event_end = event_start + 16
             processed_events.append(self.process_single_fevent_maps(event_data[event_start:event_end]))
+            if processed_events[-1] is None:
+                processed_events.pop()
         return processed_events
 
     # processes a single event, returns mantid detector information etc
@@ -640,7 +647,8 @@ class dae_streamer:
         else:
             Error.AddError(ErrorNumber=25, Severity="NOTICE", printToUser=True,
                            ErrorDesc=(
-                                       "Event Data Error - Missing e0 flag in event - SKIPPING: " + event_data))
+                                       "Event Data Error - Missing e0 flag in event - SKIPPING: " + event_data +
+                                       "IP:" + self.ip))
             return None
 
     # processes into ev42 schema
@@ -658,7 +666,8 @@ class dae_streamer:
         builder = flatbuffers.Builder(1024)
         builder.ForceDefaults(True)
 
-        source = builder.CreateString(self.ip)
+        # source = builder.CreateString(self.ip)
+        source = builder.CreateString("DAE_Streamed")
 
         tof_data = builder.CreateNumpyVector(np.asarray(event_time).astype(np.uint32))
         det_data = builder.CreateNumpyVector(np.asarray(detector_id).astype(np.uint32))
@@ -817,9 +826,8 @@ class InfluxDB_Wrapper:
             self.influx_client.write_points(self.json_data, database=self.database, time_precision=self.t_precision)
         except Exception as e:
             Error.AddError(ErrorNumber=25, Severity="NOTICE", printToUser=True,
-                           ErrorDesc=f"Influx Data Write Exception - Unable to write data to the influxDB, "
-                                     "make sure the server is up and provided values are correct. Reason:  {e}")
-            raise e
+                           ErrorDesc="Influx Data Write Exception - Unable to write data to the influxDB, "
+                                     f"make sure the server is up and provided values are correct. Reason:  {e}")
         self.json_data = []
 
 
@@ -856,7 +864,30 @@ class InfluxDB_Wrapper:
             Error.AddError(ErrorNumber=22, Severity="ERROR", printToUser=False,
                            ErrorDesc="Function Fallback Error - No value was passed to influx logger to log.")
 
+    def log_packet_event_count(self, thread_instance, stream_address, packet_count=None, event_count=None):
+        to_log = {}
 
+        if packet_count is not None:
+            to_log["packet_count"] = packet_count
+        if event_count is not None:
+            to_log["event_count"] = event_count
+
+        if len(to_log) != 0:
+            self.json_data.append(
+                {
+                    "measurement": "Python_Streamer",
+                    "tags": {
+                        "thread": thread_instance,
+                        "MADC_IP_Address": stream_address,
+                    },
+                    "time": str(datetime.datetime.utcnow()),
+                    "fields": to_log
+                }
+            )
+        else:
+            Error.AddError(ErrorNumber=22, Severity="ERROR", printToUser=False,
+                           ErrorDesc="Function Fallback Error - No value was passed to influx logger to log.")
+        self.write_data()
 
     def add_frame_to_json(self, event_count, vetos, ):
         pass

@@ -57,7 +57,7 @@ if __name__ == "__main__":
     threads = []
     for i in range(len(StreamingPorts)):
         thread_name = "Kafka Stream Handler Thread " + str(i) + "-" + str(StreamingIPs[i])
-        processing_thread = threading.Thread(target=streaming_object[i].stream_loop_to_kafka, args=((lambda: stop_threads),lock, thread_name))
+        processing_thread = threading.Thread(target=streaming_object[i].stream_loop_to_kafka, args=((lambda: stop_threads), lock, thread_name))
         threads.append(processing_thread)
         processing_thread.start()
 
